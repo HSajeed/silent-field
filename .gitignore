@@ -1,0 +1,74 @@
+# --- local working notes: machine/agent-facing, not part of the published repo ---
+# Kept on disk and read by future sessions, but deliberately untracked.
+# They are session scratch-pad + internal audit trail, not documentation for
+# anyone cloning the project. Public-facing docs live in README.md.
+CLAUDE.md
+HANDOFF.md
+
+# --- datasets: large binaries, regenerate with scripts/01_generate_data.py ---
+# HANDOFF.md: do not regenerate; they already exist on disk.
+# Manifests ARE tracked: they carry the hashes (111e13e318c9, e5d144b83287,
+# 34d5ea324579) that rerun_log_2026-09-15.md and figures/komega_metrics.json cite.
+data/*.npz
+data/*.npy
+data/*.h5
+data/*.hdf5
+data/*.zarr/
+data/*.zst
+
+# --- trained model checkpoints (regenerate with scripts/02_train_surrogate.py) ---
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+runs/model.history.json
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+pip-wheel-metadata/
+
+# --- virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- test / tooling caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.cache/
+
+# --- notebooks ---
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# --- editors / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- scratch outputs from ad-hoc analysis (figures/ and runs/ ARE tracked) ---
+scratch/
+tmp/
+*.log.txt

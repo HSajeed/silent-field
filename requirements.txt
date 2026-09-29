@@ -1,0 +1,7 @@
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+# training only -- the headline figure needs none of this
+torch>=2.2
+# optional
+pytest>=7.0
