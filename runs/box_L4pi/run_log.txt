@@ -1,0 +1,76 @@
+--- free -m @ start ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        1652        5441          21         984        6246
+Swap:           2048           0        2048
+
+U=1.138102  nt=1024  dt=0.04  grid.n=256  length=12.566371
+acoustic dt_max(M=0.1)=0.13802  dt_save=0.04000  oversampled by 3.45x
+KE CV=0.0283 drift=2.67% tau_corr=4.120 n_corr_times=9.94 peak_k=2.0 share(k<1)=0.0150
+--- free -m @ after section 1 ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2169        4924          21         984        5729
+Swap:           2048           0        2048
+
+--- free -m @ after velocity welch4 ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2178        4914          21         985        5720
+Swap:           2048           0        2048
+
+--- free -m @ after Lighthill source computed ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2446        4647          21         985        5453
+Swap:           2048           0        2048
+
+--- free -m @ after Lighthill welch4 ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2162        4931          21         985        5737
+Swap:           2048           0        2048
+
+R (all k) by Mach: {0.05: 2.2838199851487745e-09, 0.1: 7.526643376135326e-07, 0.2: 2.3344947344081256e-05, 0.3: 0.0001526119629462037}
+--- free -m @ after section 2 ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2162        4930          21         985        5736
+Swap:           2048           0        2048
+
+low-k mode count (|k|<=3): 113
+--- free -m @ after low-k mode extraction ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2163        4929          21         985        5735
+Swap:           2048           0        2048
+
+--- free -m @ after low-k welch profiles ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2171        4921          21         985        5727
+Swap:           2048           0        2048
+
+sanity check (low-k vs production, raw power, k=1.0): {'max_rel_err_all_omega': 2.037116927891658e-09, 'max_rel_err_where_significant': 3.140274584275603e-15, 'n_omega_compared': 205, 'n_omega_significant': 27, 'passes_1e-6_on_significant_bins': True}
+resolution table sample: [{'mach': 0.05, 'k': 0.5, 'c0': 22.762032611483185, 'omega_target': 11.381016305741593, 'omega_bin_4seg': 11.521733448373325, 'omega_bin_1seg': 11.351457830353745, 'density_hann4seg': 1.6619199121741373e-09, 'density_blackmanharris4seg': 1.7592762720262125e-09, 'density_dpss4seg': 1.7639148520693462e-09, 'density_hann_fullrecord': 3.3769793053342845e-09, 'max_over_min_ratio': 2.0319747543769977, 'density_float32_floor': 9.497845650051965e-22, 'margin_over_float32_floor': 1749786186686.4983, 'within_nyquist': True, 'verdict': 'UNRESOLVED'}, {'mach': 0.05, 'k': 1.0, 'c0': 22.762032611483185, 'omega_target': 22.762032611483185, 'omega_bin_4seg': 22.659409115134206, 'omega_bin_1seg': 22.70291566070749, 'density_hann4seg': 3.0402551905376934e-12, 'density_blackmanharris4seg': 2.6944968451137202e-12, 'density_dpss4seg': 2.681187473433061e-12, 'density_hann_fullrecord': 3.7810277290443574e-12, 'max_over_min_ratio': 1.4102063979148138, 'density_float32_floor': 1.824833763790207e-21, 'margin_over_float32_floor': 1666045012.3539133, 'within_nyquist': True, 'verdict': 'RESOLVED'}]
+leakage-contaminated cone fraction by mach: {0.05: 0.00018050335329782954, 0.1: 7.183139653500798e-07, 0.2: 2.317904140933309e-08, 0.3: 3.5681078517699317e-09}
+
+--- integrated cone-energy check (C_E, follow-up) ---
+  M=0.05  k=0.5  C_ratio=1.100 band_ratio=1.025 verdict=RESOLVED
+  M=0.05  k=1.0  C_ratio=1.174 band_ratio=1.266 verdict=RESOLVED
+  M=0.05  k=1.5  C_ratio=7.337 band_ratio=2.030 verdict=UNRESOLVED
+  M=0.05  k=2.0  C_ratio=48.707 band_ratio=11.022 verdict=UNRESOLVED
+  M=0.1   k=0.5  C_ratio=1.219 band_ratio=1.090 verdict=RESOLVED
+  M=0.1   k=1.0  C_ratio=1.116 band_ratio=1.094 verdict=RESOLVED
+  M=0.1   k=1.5  C_ratio=1.131 band_ratio=1.045 verdict=RESOLVED
+  M=0.1   k=2.0  C_ratio=1.135 band_ratio=1.155 verdict=RESOLVED
+  M=0.2   k=0.5  C_ratio=1.152 band_ratio=1.104 verdict=RESOLVED
+  M=0.2   k=1.0  C_ratio=1.047 band_ratio=1.181 verdict=RESOLVED
+  M=0.2   k=1.5  C_ratio=1.356 band_ratio=1.351 verdict=RESOLVED
+  M=0.2   k=2.0  C_ratio=1.044 band_ratio=1.087 verdict=RESOLVED
+  M=0.3   k=0.5  C_ratio=1.539 band_ratio=1.375 verdict=UNRESOLVED
+  M=0.3   k=1.0  C_ratio=1.146 band_ratio=1.043 verdict=RESOLVED
+  M=0.3   k=1.5  C_ratio=1.223 band_ratio=1.112 verdict=RESOLVED
+  M=0.3   k=2.0  C_ratio=1.070 band_ratio=1.108 verdict=RESOLVED
+  max |edge-exclusion relative change| over all rows/estimators: 0.1223
+  k=0.5 survival vs single-bin verdicts: {0.05: {'single_bin_verdict': 'UNRESOLVED', 'integrated_verdict': 'RESOLVED'}, 0.1: {'single_bin_verdict': 'UNRESOLVED', 'integrated_verdict': 'RESOLVED'}, 0.2: {'single_bin_verdict': 'UNRESOLVED', 'integrated_verdict': 'RESOLVED'}, 0.3: {'single_bin_verdict': 'RESOLVED', 'integrated_verdict': 'UNRESOLVED'}}
+--- free -m @ after section 3 ---
+               total        used        free      shared  buff/cache   available
+Mem:            7899        2183        4909          21         985        5715
+Swap:           2048           0        2048
+
+
+Wrote /mnt/s/projects/Acoustic_blindness/silent-field/runs/box_L4pi/results.json
+Total runtime: 83.5s  peak RSS: 2362 MB
