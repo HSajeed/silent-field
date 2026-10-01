@@ -81,6 +81,140 @@ def source_spectrum(source: np.ndarray, dt: float, window: str = "hann"):
     return s_hat, omega
 
 
+def radiating_band(
+    omega: np.ndarray,
+    c0: float,
+    grid: Grid,
+    n_band: int = 24,
+    mode: str = "k",
+    power: np.ndarray | None = None,
+    radius: float | None = None,
+) -> tuple[list[int], dict]:
+    """Pick the frequency band the far-field error should be measured on.
+
+    A disturbance radiates only if omega / |k| >= c0, and the smallest |k| the grid
+    resolves is dk, so the lowest frequency that can radiate at all is c0 * dk.  Below
+    that there is nothing acoustic to measure, however much source power sits there --
+    and that is most of it: on data/turb2d.npz at M = 0.1, 91% of the Lighthill
+    source's omega > 0 power is at omega < c0 * dk, because that is the convective
+    ridge.  Selecting a band by array index rather than by this condition measures
+    radiated-sound error on frequencies that are hydrodynamically trapped, which is
+    the mistake this function exists to prevent.
+
+    mode="k"    the radiating box modes, sampled log-uniformly in |k| from dk up to
+                the largest |k| the record can reach (omega_max / c0).  Both edges are
+                set by c0, the grid and the record's frequency resolution, never by
+                array position, so the band is identical for records of different
+                length.  Log spacing because the number of radiating box modes is
+                usually small -- at M = 0.1 in a 2*pi box it is six -- and sampling
+                them linearly would either duplicate frequencies or return a band of
+                six where 24 were asked for.  It also keeps the Hankel arguments
+                large: k = omega / c0, so kr = k * radius.
+    mode="top"  the n_band radiating bins carrying the most `power`, which must be
+                the *truth* source's frequency profile.  Same band for truth and
+                prediction, so the comparison stays fair.  Use when the low modes turn
+                out to be nearly empty.
+
+    Returns the indices and a metadata dict, because a band nobody can audit is how
+    the original bug survived: `source_power_fraction_captured` and
+    `radiating_power_fraction_available` say directly how much of the radiating
+    signal the chosen band actually sees.
+    """
+    omega = np.asarray(omega, dtype=float)
+    dk = 2.0 * np.pi / grid.length
+    omega_min = c0 * dk
+
+    radiating = np.nonzero(omega >= omega_min)[0]
+    if radiating.size == 0:
+        return [], {"mode": mode, "n_radiating_available": 0,
+                    "error": f"no frequency reaches the radiation condition "
+                             f"(omega >= c0*dk = {omega_min:.3f}, "
+                             f"omega_max = {omega.max():.3f}); the record is too short"}
+
+    if mode == "k":
+        k_max = float(omega.max() / c0 / dk)
+        if k_max <= 1.0:
+            return [], {"mode": mode, "n_radiating_available": int(radiating.size),
+                        "error": f"no box mode above |k| = dk can radiate: the record "
+                                 f"reaches k = {omega.max()/c0/dk:.2f} but needs "
+                                 f">= 1"}
+        k_j = np.geomspace(1.0, k_max, n_band)
+        targets = c0 * k_j * dk
+        idx = sorted({int(np.argmin(np.abs(omega - t))) for t in targets})
+    elif mode == "top":
+        if power is None:
+            raise ValueError("mode='top' needs the truth source's frequency profile")
+        p = np.asarray(power, dtype=float)
+        order = radiating[np.argsort(p[radiating])[::-1][:n_band]]
+        idx = sorted(int(i) for i in order)
+    else:
+        raise ValueError(f"unknown band mode {mode!r}; expected 'k' or 'top'")
+
+    meta = {
+        "mode": mode,
+        "n_radiating_available": int(radiating.size),
+        "omega_min_radiating": float(omega_min),
+        "omega_band": [float(omega[idx[0]]), float(omega[idx[-1]])],
+        "k_band": [float(omega[idx[0]] / c0), float(omega[idx[-1]] / c0)],
+        "n_selected": len(idx),
+    }
+    if power is not None:
+        p = np.asarray(power, dtype=float)
+        total = float(p[omega > 0].sum())
+        meta["source_power_fraction_captured"] = (
+            float(p[idx].sum() / total) if total > 0 else None
+        )
+        meta["radiating_power_fraction_available"] = (
+            float(p[radiating].sum() / total) if total > 0 else None
+        )
+        meta["band_share_of_radiating_power"] = (
+            float(p[idx].sum() / p[radiating].sum()) if p[radiating].sum() > 0 else None
+        )
+    if radius is not None:
+        k_band = np.array(meta["k_band"])
+        meta["kr_range"] = [float(k_band.min() * radius), float(k_band.max() * radius)]
+    return idx, meta
+
+
+def select_band(
+    omega: np.ndarray,
+    c0: float,
+    grid: Grid,
+    n_band: int = 24,
+    mode: str = "auto",
+    power: np.ndarray | None = None,
+    radius: float | None = None,
+    min_fraction: float = 0.01,
+) -> tuple[list[int], dict]:
+    """`radiating_band` with the 'auto' fallback resolved.
+
+    'auto' takes the physically anchored 'k' band and keeps it only if it actually
+    sees a worthwhile share of the radiating source power; otherwise it falls back to
+    'top' and says so in the metadata.  Kept out of `scripts/03` because that script
+    needs a trained checkpoint to reach this point, so a fallback nobody can test is
+    a fallback nobody should rely on.
+    """
+    idx, meta = radiating_band(omega, c0, grid, n_band, mode="k", power=power, radius=radius)
+    meta["band_mode_requested"] = mode
+    if mode != "auto" or not idx:
+        return idx, meta
+
+    captured = meta.get("band_share_of_radiating_power")
+    if captured is None or captured >= min_fraction:
+        meta["fallback_reason"] = None
+        return idx, meta
+
+    fallback_idx, fallback_meta = radiating_band(
+        omega, c0, grid, n_band, mode="top", power=power, radius=radius
+    )
+    fallback_meta["band_mode_requested"] = mode
+    fallback_meta["fallback_reason"] = (
+        f"mode 'k' captured only {captured:.2%} of the radiating source power, "
+        f"under the {min_fraction:.0%} threshold"
+    )
+    return fallback_idx, fallback_meta
+
+
 def far_field_pressure(
     source_hat: np.ndarray,
     omega: np.ndarray,

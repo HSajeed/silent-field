@@ -40,14 +40,36 @@ from ..spectral import Grid
 class KOmegaSpectrum:
     """Energy density on the (|k|, omega) plane.
 
-    power   : (n_omega, n_k)  non-negative energy density, already radially binned
+    power   : (n_omega, n_k)  non-negative energy density, radially binned
     k_bins  : (n_k,)          bin centres of |k|, angular wavenumber
     omega   : (n_omega,)      angular frequency, non-negative half only
+
+    k_resolved     : (n_k_res,)  the distinct |k| values actually present, up to
+                                   k_mag.max() -- not truncated at the bin count
+    power_resolved : (n_omega, n_k_res)  power summed over the modes sharing each
+                                   resolved |k|, over ALL grid modes
+
+    The two k axes exist because they answer different questions.  `k_bins` is what
+    you plot: radial bins are what makes a (|k|, omega) map legible.  `k_resolved` is
+    what you *measure* with.  A cone mask evaluated on bin centres is wrong, because a
+    mode at |k| = 6.5 is tested against omega >= 6 c0 rather than omega >= 6.5 c0, and
+    near the cone edge -- where k_edge = omega_max / c0 is a fixed distance from
+    omega_max -- that admits a slab of non-radiating modes.  Measured on
+    data/turb2d.npz at M = 0.1, masking on bin centres instead of true |k| inflated
+    the fraction by 2.84x (velocity) and 4.79x (Lighthill source).
+
+    `k_resolved` also keeps the corner modes, which the `n_k_bins = n/2` truncation
+    discards; "fraction of *total* energy" is otherwise not quite total.
     """
 
     power: np.ndarray
     k_bins: np.ndarray
     omega: np.ndarray
+    k_resolved: np.ndarray | None = None
+    power_resolved: np.ndarray | None = None
+
+    def has_resolved(self) -> bool:
+        return self.k_resolved is not None and self.power_resolved is not None
 
     def sonic_line(self, c0: float) -> np.ndarray:
         """omega = c0 |k| evaluated at the bin centres, for overlaying on a plot."""
@@ -58,23 +80,82 @@ class KOmegaSpectrum:
         return u_conv * self.k_bins
 
     def radiating_mask(self, c0: float) -> np.ndarray:
-        """Boolean (n_omega, n_k) mask of the region that can radiate."""
+        """Boolean (n_omega, n_k) mask of the binned plane, for display.
+
+        Do NOT use this for arithmetic -- see the class docstring. Use
+        `radiating_mask_resolved`.  Retained at its historical shape because the
+        archived analyses in `runs/*/analysis.py` index `power` with it.
+        """
         kk, ww = np.meshgrid(self.k_bins, self.omega, indexing="xy")
-        return ww >= c0 * kk
+        return (kk > 0.0) & (ww >= c0 * kk)
+
+    def radiating_mask_resolved(self, c0: float) -> np.ndarray:
+        """Boolean (n_omega, n_k_res) cone mask at the true |k| of every mode.
+
+        The k = 0 column is excluded: the condition omega >= c0 * 0 is satisfied by the
+        whole column, which would count the mean mode as radiating.  Harmless for
+        records whose spatial mean has been removed (its power is then ~1e-32), but a
+        dataset that develops mean flow would otherwise get a silent floor
+        contribution.
+        """
+        if not self.has_resolved():
+            raise ValueError(
+                "this spectrum has no resolved radial grid; rebuild it with "
+                "komega_spectrum / welch_komega_spectrum"
+            )
+        kk, ww = np.meshgrid(self.k_resolved, self.omega, indexing="xy")
+        return (kk > 0.0) & (ww >= c0 * kk)
 
     def radiating_fraction(self, c0: float) -> float:
         """THE metric: fraction of total spectral energy inside the radiating cone.
 
         This is literally the share of an L2 objective that the acoustically
-        decisive subspace receives.
+        decisive subspace receives.  Evaluated on the resolved |k| grid.
         """
+        if self.has_resolved():
+            return self.radiating_fraction_resolved(c0)
         total = self.power.sum()
         if total <= 0.0:
             return 0.0
         return float(self.power[self.radiating_mask(c0)].sum() / total)
 
+    def radiating_fraction_resolved(self, c0: float) -> float:
+        """`radiating_fraction` on the resolved grid, with a binned fallback."""
+        if not self.has_resolved():
+            return self.radiating_fraction(c0)
+        total = self.power_resolved.sum()
+        if total <= 0.0:
+            return 0.0
+        return float(
+            self.power_resolved[self.radiating_mask_resolved(c0)].sum() / total
+        )
+
 
 # ------------------------------------------------------------------- estimation
+def _radial_resolve(power: np.ndarray, k_sq: np.ndarray, chunk: int = 64) -> tuple[np.ndarray, np.ndarray]:
+    """Sum `power` over modes sharing each distinct |k|, keeping every grid mode.
+
+    Grouping is done on k^2 rather than |k| because the squared wavenumbers are exact
+    integers on a periodic grid, so two modes that ought to share a bin provably do --
+    no floating-point tolerance, no accidental near-duplicate groups.
+
+    The gather that sorting implies is applied in chunks along the frequency axis.  A
+    full fancy-index copy of the (n_omega, n^2) array would be 1.1 GB at n = 256,
+    nt = 4096, which is the allocation `HANDOFF.md` warns against; chunking bounds it
+    to a few tens of MB.
+    """
+    flat = power.reshape(power.shape[0], -1)
+    order = np.argsort(k_sq, kind="stable")
+    k_sq_sorted = k_sq[order]
+    unique_k_sq, starts = np.unique(k_sq_sorted, return_index=True)
+
+    out = np.empty((flat.shape[0], unique_k_sq.size), dtype=flat.dtype)
+    for lo in range(0, flat.shape[0], chunk):
+        hi = min(lo + chunk, flat.shape[0])
+        out[lo:hi] = np.add.reduceat(flat[lo:hi, order], starts, axis=1)
+    return np.sqrt(unique_k_sq), out
+
+
 def komega_spectrum(
     field: np.ndarray,
     grid: Grid,
@@ -160,7 +241,13 @@ def komega_spectrum(
         if sel.any():
             binned[:, b] = flat[:, sel].sum(axis=1)
 
-    return KOmegaSpectrum(power=binned, k_bins=centres, omega=omega)
+    # The binned grid above stops at n_k_bins and the cone mask is applied to it in
+    # `radiating_mask`, which is fine for plotting and wrong for arithmetic.  Keep an
+    # untruncated, radially *resolved* companion for the metric itself.
+    k_res, power_res = _radial_resolve(power, grid.k_sq.ravel())
+
+    return KOmegaSpectrum(power=binned, k_bins=centres, omega=omega,
+                          k_resolved=k_res, power_resolved=power_res)
 
 
 def welch_komega_spectrum(
@@ -185,18 +272,21 @@ def welch_komega_spectrum(
     step = max(1, int(seg * (1 - overlap)))
 
     acc = None
+    acc_res = None
     count = 0
     for start in range(0, nt - seg + 1, step):
         s = komega_spectrum(
             arr[start : start + seg], grid, dt, window=window, n_k_bins=n_k_bins
         )
         acc = s.power if acc is None else acc + s.power
+        acc_res = s.power_resolved if acc_res is None else acc_res + s.power_resolved
         count += 1
         last = s
 
     if acc is None:
         raise ValueError("record too short for the requested segmentation")
-    return KOmegaSpectrum(power=acc / count, k_bins=last.k_bins, omega=last.omega)
+    return KOmegaSpectrum(power=acc / count, k_bins=last.k_bins, omega=last.omega,
+                          k_resolved=last.k_resolved, power_resolved=acc_res / count)
 
 
 # ------------------------------------------------------------------- convenience
