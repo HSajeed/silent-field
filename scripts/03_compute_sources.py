@@ -16,7 +16,12 @@ from src.solvers.io import load_dataset
 from src.diagnostics.errors import error_triple, relative_l2
 from src.diagnostics.divergence import divergence_error, dilatational_energy_fraction
 from src.acoustics.lighthill import source_timeseries
-from src.acoustics.greens import source_spectrum, far_field_pressure, observer_ring
+from src.acoustics.greens import (
+    source_spectrum,
+    far_field_pressure,
+    observer_ring,
+    select_band,
+)
 from src.acoustics.komega import sound_speed
 
 
@@ -26,6 +31,16 @@ def main():
     ap.add_argument("--model", default="runs/model.pt")
     ap.add_argument("--mach", type=float, default=0.1)
     ap.add_argument("--n-obs", type=int, default=36)
+    ap.add_argument("--n-band", type=int, default=24,
+                    help="number of radiating frequencies in the far-field band.")
+    ap.add_argument("--band-mode", choices=("auto", "k", "top"), default="auto",
+                    help="'k' = the lowest radiating box modes; 'top' = the "
+                         "strongest radiating frequencies of the truth source; "
+                         "'auto' tries 'k' and falls back to 'top' if the band "
+                         "captures under --min-cone-fraction of the radiating power.")
+    ap.add_argument("--min-cone-fraction", type=float, default=0.01,
+                    help="minimum share of the radiating source power the band must "
+                         "capture before 'auto' accepts it.")
     ap.add_argument("--outdir", default="figures")
     args = ap.parse_args()
 
@@ -75,8 +90,32 @@ def main():
     Sp = source_timeseries(up, vp, grid)
     sht, om = source_spectrum(St, dt)
     shp, _ = source_spectrum(Sp, dt)
-    band = [i for i in range(1, len(om)) if om[i] > 0][:24]
+
     obs = observer_ring(30*grid.length, args.n_obs, (grid.length/2, grid.length/2))
+    radius = 30 * grid.length
+    truth_power = (np.abs(sht) ** 2).sum(axis=(1, 2))     # per-frequency, truth only
+
+    band, meta = select_band(om, c0, grid, args.n_band, mode=args.band_mode,
+                             power=truth_power, radius=radius,
+                             min_fraction=args.min_cone_fraction)
+    if not band:
+        sys.exit(f"no radiating frequencies available: {meta.get('error')}")
+    if meta.get("fallback_reason"):
+        print(f"[band] {meta['fallback_reason']}; using mode '{meta['mode']}'")
+
+    print(f"[band] mode={meta['mode']}  {meta['n_selected']} frequencies, "
+          f"omega in [{meta['omega_band'][0]:.2f}, {meta['omega_band'][1]:.2f}], "
+          f"k in [{meta['k_band'][0]:.2f}, {meta['k_band'][1]:.2f}]")
+    print(f"[band] lowest radiating frequency is c0*dk = {meta['omega_min_radiating']:.2f} "
+          f"({meta['n_radiating_available']} of {len(om)} bins qualify)")
+    print(f"[band] kr in [{meta['kr_range'][0]:.0f}, {meta['kr_range'][1]:.0f}] "
+          f"at r={radius:.0f} (far-field asymptote needs kr >> 1)")
+    if meta.get("band_share_of_radiating_power") is not None:
+        print(f"[band] captures {meta['source_power_fraction_captured']:.2%} of the "
+              f"truth source's omega>0 power, "
+              f"{meta['band_share_of_radiating_power']:.1%} of what is radiating at all "
+              f"({meta['radiating_power_fraction_available']:.2%} of the total)")
+
     pt = far_field_pressure(sht, om, grid, obs, c0, True, band)
     pp = far_field_pressure(shp, om, grid, obs, c0, True, band)
     ff = relative_l2(np.abs(pp), np.abs(pt))
@@ -86,7 +125,8 @@ def main():
 
     out = Path(args.outdir); out.mkdir(parents=True, exist_ok=True)
     (out/"03_errors.json").write_text(json.dumps(
-        {**trip, "far_field": ff, "mach": args.mach, "c0": c0}, indent=2))
+        {**trip, "far_field": ff, "mach": args.mach, "c0": c0, "far_field_band": meta},
+        indent=2))
 
 
 if __name__ == "__main__":

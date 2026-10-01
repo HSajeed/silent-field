@@ -1,0 +1,351 @@
+{
+  "u_rms": 1.1307973628089494,
+  "order": 1,
+  "default_lambda": 0.01,
+  "data": "data/turb2d.npz",
+  "argv": [
+    "scripts/06_sobolev_argument.py"
+  ],
+  "rows": [
+    {
+      "mach": 0.05,
+      "c0": 22.615947256178988,
+      "l2": 1.7706109995283713e-11,
+      "h1_add_default_lambda": 1.7701442741476804e-11,
+      "h1_add_ratio_to_l2": 0.9997364043367994,
+      "h1_multiplicative": 9.455642971125776e-13,
+      "h1_multiplicative_ratio_to_l2": 0.053403277024961594,
+      "cone_weight_report": {
+        "n_k_in_cone": 7,
+        "k_max_in_cone": 3.1622776601683795,
+        "sobolev_weight_in_cone_over_mean": [
+          0.0007292616226071103,
+          0.004010938924339107
+        ],
+        "objective_weight_in_cone_minus_one": [
+          7.898464343303324e-05
+        ],
+        "fraction_of_resolved_k_below_cone_edge": 0.0037837837837837837
+      },
+      "sweep": [
+        {
+          "lambda": null,
+          "cone_share": 1.7706109995283713e-11,
+          "ratio_to_l2": 1.0,
+          "note": "l2 baseline"
+        },
+        {
+          "lambda": null,
+          "cone_share": 9.455642971125776e-13,
+          "ratio_to_l2": 0.053403277024961594,
+          "note": "h1 multiplicative, not the trained objective"
+        },
+        {
+          "lambda": 0.001,
+          "cone_share": 1.7705643152902974e-11,
+          "ratio_to_l2": 0.9999736338257887
+        },
+        {
+          "lambda": 0.01,
+          "cone_share": 1.7701442741476804e-11,
+          "ratio_to_l2": 0.9997364043367994
+        },
+        {
+          "lambda": 0.1,
+          "cone_share": 1.765955413552319e-11,
+          "ratio_to_l2": 0.9973706330880738
+        },
+        {
+          "lambda": 1.0,
+          "cone_share": 1.725190619712213e-11,
+          "ratio_to_l2": 0.9743476236009735
+        },
+        {
+          "lambda": 10.0,
+          "cone_share": 1.4054649517973665e-11,
+          "ratio_to_l2": 0.7937739865909187
+        },
+        {
+          "lambda": 100.0,
+          "cone_share": 5.3731959773080244e-12,
+          "ratio_to_l2": 0.3034656386263982
+        },
+        {
+          "lambda": 1000.0,
+          "cone_share": 1.5264299688903125e-12,
+          "ratio_to_l2": 0.08620922208756751
+        },
+        {
+          "lambda": 10000.0,
+          "cone_share": 1.0055209763777183e-12,
+          "ratio_to_l2": 0.056789491121740115
+        },
+        {
+          "lambda": 100000.0,
+          "cone_share": 9.515793305953099e-13,
+          "ratio_to_l2": 0.053742992156310856
+        },
+        {
+          "lambda": 1000000.0,
+          "cone_share": 9.461659948046778e-13,
+          "ratio_to_l2": 0.053437259514184834
+        }
+      ]
+    },
+    {
+      "mach": 0.1,
+      "c0": 11.307973628089494,
+      "l2": 3.2041572561075305e-08,
+      "h1_add_default_lambda": 3.203312652829256e-08,
+      "h1_add_ratio_to_l2": 0.9997364039244127,
+      "h1_multiplicative": 1.7110775247943917e-09,
+      "h1_multiplicative_ratio_to_l2": 0.05340179610513375,
+      "cone_weight_report": {
+        "n_k_in_cone": 22,
+        "k_max_in_cone": 6.708203932499369,
+        "sobolev_weight_in_cone_over_mean": [
+          0.0007292616226071103,
+          0.01677301731996354
+        ],
+        "objective_weight_in_cone_minus_one": [
+          0.0003302994179932295
+        ],
+        "fraction_of_resolved_k_below_cone_edge": 0.011891891891891892
+      },
+      "sweep": [
+        {
+          "lambda": null,
+          "cone_share": 3.2041572561075305e-08,
+          "ratio_to_l2": 1.0,
+          "note": "l2 baseline"
+        },
+        {
+          "lambda": null,
+          "cone_share": 1.7110775247943917e-09,
+          "ratio_to_l2": 0.05340179610513375,
+          "note": "h1 multiplicative, not the trained objective"
+        },
+        {
+          "lambda": 0.001,
+          "cone_share": 3.2040727746069477e-08,
+          "ratio_to_l2": 0.9999736337845399
+        },
+        {
+          "lambda": 0.01,
+          "cone_share": 3.203312652829256e-08,
+          "ratio_to_l2": 0.9997364039244127
+        },
+        {
+          "lambda": 0.1,
+          "cone_share": 3.195732337857223e-08,
+          "ratio_to_l2": 0.9973706289745148
+        },
+        {
+          "lambda": 1.0,
+          "cone_share": 3.1219628795419575e-08,
+          "ratio_to_l2": 0.974347583468664
+        },
+        {
+          "lambda": 10.0,
+          "cone_share": 2.5433756450749423e-08,
+          "ratio_to_l2": 0.7937736639570188
+        },
+        {
+          "lambda": 100.0,
+          "cone_share": 9.723481363966628e-09,
+          "ratio_to_l2": 0.3034645489210131
+        },
+        {
+          "lambda": 1000.0,
+          "cone_share": 2.7622332384489287e-09,
+          "ratio_to_l2": 0.08620779249157517
+        },
+        {
+          "lambda": 10000.0,
+          "cone_share": 1.8195773192277945e-09,
+          "ratio_to_l2": 0.05678801549953421
+        },
+        {
+          "lambda": 100000.0,
+          "cone_share": 1.7219625488548544e-09,
+          "ratio_to_l2": 0.05374151176795631
+        },
+        {
+          "lambda": 1000000.0,
+          "cone_share": 1.7121663788921178e-09,
+          "ratio_to_l2": 0.05343577864752148
+        }
+      ]
+    },
+    {
+      "mach": 0.2,
+      "c0": 5.653986814044747,
+      "l2": 4.787223205031794e-06,
+      "h1_add_default_lambda": 4.7859735288469755e-06,
+      "h1_add_ratio_to_l2": 0.9997389559393209,
+      "h1_multiplicative": 2.9951894250303386e-07,
+      "h1_multiplicative_ratio_to_l2": 0.06256632074063583,
+      "cone_weight_report": {
+        "n_k_in_cone": 80,
+        "k_max_in_cone": 13.601470508735444,
+        "sobolev_weight_in_cone_over_mean": [
+          0.0007292616226071103,
+          0.06782133090246127
+        ],
+        "objective_weight_in_cone_minus_one": [
+          0.0013355585162331263
+        ],
+        "fraction_of_resolved_k_below_cone_edge": 0.043243243243243246
+      },
+      "sweep": [
+        {
+          "lambda": null,
+          "cone_share": 4.787223205031794e-06,
+          "ratio_to_l2": 1.0,
+          "note": "l2 baseline"
+        },
+        {
+          "lambda": null,
+          "cone_share": 2.9951894250303386e-07,
+          "ratio_to_l2": 0.06256632074063583,
+          "note": "h1 multiplicative, not the trained objective"
+        },
+        {
+          "lambda": 0.001,
+          "cone_share": 4.787098206086073e-06,
+          "ratio_to_l2": 0.9999738890500051
+        },
+        {
+          "lambda": 0.01,
+          "cone_share": 4.7859735288469755e-06,
+          "ratio_to_l2": 0.9997389559393209
+        },
+        {
+          "lambda": 0.1,
+          "cone_share": 4.774757684275166e-06,
+          "ratio_to_l2": 0.9973960853248861
+        },
+        {
+          "lambda": 1.0,
+          "cone_share": 4.665608291187497e-06,
+          "ratio_to_l2": 0.9745959382640715
+        },
+        {
+          "lambda": 10.0,
+          "cone_share": 3.8095298146389212e-06,
+          "ratio_to_l2": 0.7957702516637973
+        },
+        {
+          "lambda": 100.0,
+          "cone_share": 1.4850353285410268e-06,
+          "ratio_to_l2": 0.310208082000464
+        },
+        {
+          "lambda": 1000.0,
+          "cone_share": 4.5504808804141635e-07,
+          "ratio_to_l2": 0.09505470469041859
+        },
+        {
+          "lambda": 10000.0,
+          "cone_share": 3.1557258717252693e-07,
+          "ratio_to_l2": 0.06591975632989752
+        },
+        {
+          "lambda": 100000.0,
+          "cone_share": 3.0112949217640494e-07,
+          "ratio_to_l2": 0.06290274743402215
+        },
+        {
+          "lambda": 1000000.0,
+          "cone_share": 2.9968004950672074e-07,
+          "ratio_to_l2": 0.06259997427981435
+        }
+      ]
+    },
+    {
+      "mach": 0.3,
+      "c0": 3.769324542696498,
+      "l2": 6.226701668606947e-05,
+      "h1_add_default_lambda": 6.225101242002093e-05,
+      "h1_add_ratio_to_l2": 0.9997429736174895,
+      "h1_multiplicative": 4.794197857304633e-06,
+      "h1_multiplicative_ratio_to_l2": 0.07699417946222567,
+      "cone_weight_report": {
+        "n_k_in_cone": 169,
+        "k_max_in_cone": 20.615528128088304,
+        "sobolev_weight_in_cone_over_mean": [
+          0.0007292616226071103,
+          0.15533272561531453
+        ],
+        "objective_weight_in_cone_minus_one": [
+          0.0030588598275016476
+        ],
+        "fraction_of_resolved_k_below_cone_edge": 0.09135135135135135
+      },
+      "sweep": [
+        {
+          "lambda": null,
+          "cone_share": 6.226701668606947e-05,
+          "ratio_to_l2": 1.0,
+          "note": "l2 baseline"
+        },
+        {
+          "lambda": null,
+          "cone_share": 4.794197857304633e-06,
+          "ratio_to_l2": 0.07699417946222567,
+          "note": "h1 multiplicative, not the trained objective"
+        },
+        {
+          "lambda": 0.001,
+          "cone_share": 6.226541585826512e-05,
+          "ratio_to_l2": 0.9999742909185384
+        },
+        {
+          "lambda": 0.01,
+          "cone_share": 6.225101242002093e-05,
+          "ratio_to_l2": 0.9997429736174895
+        },
+        {
+          "lambda": 0.1,
+          "cone_share": 6.210737412182255e-05,
+          "ratio_to_l2": 0.9974361616672308
+        },
+        {
+          "lambda": 1.0,
+          "cone_share": 6.0709527265786104e-05,
+          "ratio_to_l2": 0.974986927218053
+        },
+        {
+          "lambda": 10.0,
+          "cone_share": 4.974596097272627e-05,
+          "ratio_to_l2": 0.7989135118441536
+        },
+        {
+          "lambda": 100.0,
+          "cone_share": 1.997678665715137e-05,
+          "ratio_to_l2": 0.32082453472707684
+        },
+        {
+          "lambda": 1000.0,
+          "cone_share": 6.786017701307282e-06,
+          "ratio_to_l2": 0.1089825410380624
+        },
+        {
+          "lambda": 10000.0,
+          "cone_share": 4.999792557324202e-06,
+          "ratio_to_l2": 0.08029600297909836
+        },
+        {
+          "lambda": 100000.0,
+          "cone_share": 4.81482373284756e-06,
+          "ratio_to_l2": 0.07732542827806209
+        },
+        {
+          "lambda": 1000000.0,
+          "cone_share": 4.796261111274434e-06,
+          "ratio_to_l2": 0.07702731504635367
+        }
+      ]
+    }
+  ]
+}

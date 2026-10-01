@@ -27,8 +27,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.spectral import Grid
 from src.solvers.io import load_dataset
 from src.acoustics.komega import welch_komega_spectrum, komega_spectrum, sound_speed
-from src.acoustics.radiating import mach_sweep, effective_weight_in_cone
+from src.acoustics.radiating import (
+    effective_weight_in_cone,
+    sobolev_lambda_sweep,
+)
 from src.acoustics.lighthill import source_timeseries
+
+# Mirrors TrainConfig.sobolev_weight.  Spelled out rather than imported because this
+# script must stay torch-free -- the headline figure needs no model and no torch.
+# tests/test_radiating.py asserts the two agree.
+DEFAULT_SOBOLEV_LAMBDA = 1e-2
 
 
 def _spectrum(field, grid, dt, n_segments):
@@ -73,6 +81,9 @@ def main():
     ap.add_argument("--machs", type=float, nargs="+", default=[0.05, 0.1, 0.2, 0.3])
     ap.add_argument("--plot-mach", type=float, default=0.1,
                      help="Mach number whose sonic line/cone is drawn on the figure.")
+    ap.add_argument("--sobolev-lam", type=float, default=DEFAULT_SOBOLEV_LAMBDA,
+                     help="lambda for the trained Sobolev objective "
+                          "(default: TrainConfig.sobolev_weight).")
     ap.add_argument("--outdir", default="figures")
     args = ap.parse_args()
 
@@ -94,6 +105,7 @@ def main():
     src_specs = _full_and_half_spectra(src, grid, dt, args.segments)
 
     print("\n--- THE NUMBER: share of the objective inside the radiating cone ---")
+    default_lam = args.sobolev_lam
     rows = []
     for m in args.machs:
         c0 = sound_speed(u_rms, m)
@@ -102,7 +114,17 @@ def main():
         l2_half1 = effective_weight_in_cone(vel_specs["half1"], c0, "l2")
         l2_half2 = effective_weight_in_cone(vel_specs["half2"], c0, "l2")
         l2_lo, l2_hi, l2_spread = _band([l2_full, l2_half1, l2_half2])
-        h1 = effective_weight_in_cone(vel_specs["full"], c0, "h1")
+
+        # Pure multiplicative H1: a reweighting of the same energy, and NOT the
+        # objective `losses.sobolev_loss` trains.  Kept because it is the natural
+        # analytical reading, but it is no longer presented as the Stage-4 number.
+        h1_mult = effective_weight_in_cone(vel_specs["full"], c0, "h1")
+        # The additive reading: what training actually minimises, at the default
+        # strength.  This is the number the corrected Stage-4 argument rests on.
+        h1_add = effective_weight_in_cone(
+            vel_specs["full"], c0, "sobolev", lam=default_lam,
+            convention="additive", grid=grid,
+        )
 
         src_full = effective_weight_in_cone(src_specs["full"], c0, "l2")
         src_half1 = effective_weight_in_cone(src_specs["half1"], c0, "l2")
@@ -111,16 +133,23 @@ def main():
 
         rows.append({
             "mach": float(m), "c0": c0,
-            "l2": l2_full, "h1": h1,
+            "l2": l2_full,
             "l2_half1": l2_half1, "l2_half2": l2_half2,
             "l2_band": [l2_lo, l2_hi], "l2_spread": l2_spread,
+            "h1_mult": h1_mult,
+            "h1_add": h1_add,
+            "h1_add_lambda": default_lam,
+            "sobolev_sweep": sobolev_lambda_sweep(
+                vel_specs["full"], c0, grid=grid,
+                lambdas=(1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3, 1e4, 1e6),
+            ),
             "src_l2": src_full,
             "src_l2_half1": src_half1, "src_l2_half2": src_half2,
             "src_l2_band": [src_lo, src_hi], "src_l2_spread": src_spread,
         })
 
     header = (f"{'Mach':>6} {'c0':>8} {'R_u':>9} {'R_u band':>19} {'F_u':>6} "
-              f"{'R_S':>9} {'R_S band':>19} {'F_S':>6} {'H1':>9}")
+              f"{'R_S':>9} {'R_S band':>19} {'F_S':>6} {'H1add':>9} {'H1mult':>9}")
     print(header)
     for r in rows:
         lo_u, hi_u = r["l2_band"]
@@ -129,13 +158,29 @@ def main():
         band_s = f"[{_fmt_sci(lo_s)}, {_fmt_sci(hi_s)}]"
         print(f"{r['mach']:>6.2g} {_fmt_c0(r['c0']):>8} {_fmt_sci(r['l2']):>9} "
               f"{band_u:>19} {r['l2_spread']:>6.1f} {_fmt_sci(r['src_l2']):>9} "
-              f"{band_s:>19} {r['src_l2_spread']:>6.1f} {_fmt_sci(r['h1']):>9}")
+              f"{band_s:>19} {r['src_l2_spread']:>6.1f} "
+              f"{_fmt_sci(r['h1_add']):>9} {_fmt_sci(r['h1_mult']):>9}")
     print("\nBand = envelope of {full record, first half, second half} estimates "
           "(halves use half as many Welch segments). It bounds finite-record and "
           "windowing sensitivity only -- it does NOT include realization-to-"
           "realization or domain-size uncertainty.")
-    print("\nH1 (Sobolev) is the standard remedy for spectral bias. Note it does")
-    print("not rescue the cone: it up-weights HIGH k, and the cone is at LOW k.")
+    print("\nH1add is the cone share of the objective `losses.sobolev_loss` actually")
+    print(f"minimises, at its default lambda = {default_lam:g}. H1mult is the same thing")
+    print("read as a pure (1 + k^2) reweighting of the energy, which is what the")
+    print("pre-2026-09-30 numbers reported. The gap between the two columns is the")
+    print("whole correction: they are different objectives, and only H1add is trained.")
+    print("\nlambda sweep of H1add at the plotted Mach number "
+          f"(full lambda range in figures/komega_metrics.json):")
+    for r in rows:
+        if r["mach"] != args.plot_mach:
+            continue
+        print(f"  M = {r['mach']:g}, R_u = {_fmt_sci(r['l2'])}")
+        for entry in r["sobolev_sweep"]:
+            lam = entry["lambda"]
+            label = "l2 baseline" if lam is None and entry.get("note") == "l2 baseline" else (
+                "h1 multiplicative" if lam is None else f"lambda = {lam:.0e}")
+            print(f"    {label:>18}: {_fmt_sci(entry['cone_share'])}"
+                  f"   ({entry['ratio_to_l2']:.3g}x L2)")
 
     out = Path(args.outdir); out.mkdir(parents=True, exist_ok=True)
 
