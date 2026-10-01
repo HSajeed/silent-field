@@ -88,9 +88,10 @@ version:
   corrupts the radiating fraction.
 - **Masking a binned spectrum.** Fixing the bin centring is not enough. A cone
   condition evaluated at bin *centres* tests every mode in a bin against the wrong
-  `k`: on a square grid one bin holds several distinct `|k|` (√21, 5 and √29 all
+  `k`: on a square grid one bin holds several distinct `|k|` (5, √26 and √29 all
   land in the bin centred on 5). Near the cone edge that admits a slab of
-  non-radiating modes — measured, it inflated the headline number by 2.8×. The
+  non-radiating modes — measured, it inflated the headline number by 2.7× (2.8× on
+  a single full-record Hann estimate). The
   metric therefore runs on a radially *resolved* grid (`KOmegaSpectrum.k_resolved`),
   not the binned one. `radiating_mask` is kept for plotting only.
 - **Rotating-quadrupole directivity.** A co-rotating pair radiates a *spinning*
