@@ -1,9 +1,7 @@
-# --- local working notes: machine/agent-facing, not part of the published repo ---
-# Kept on disk and read by future sessions, but deliberately untracked.
-# They are session scratch-pad + internal audit trail, not documentation for
-# anyone cloning the project. Public-facing docs live in README.md.
-CLAUDE.md
-HANDOFF.md
+# --- local-only notes ---
+# CLAUDE.md and HANDOFF.md are tracked since 2026-10-01 (the repo is private and they
+# are the project's working state). This one stays local.
+agent-operator-playbook-full.md
 
 # --- datasets: large binaries, regenerate with scripts/01_generate_data.py ---
 # HANDOFF.md: do not regenerate; they already exist on disk.
