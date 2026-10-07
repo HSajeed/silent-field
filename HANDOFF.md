@@ -212,8 +212,19 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    `--out` every `--save-every` epochs, resumes from `<out>/last.pt`, and both end with a
    SUMMARY block. Smoke runs pass locally. The workflow and runner cell are in `colabmcp.md`
    (local, untracked); Drive layout as the notebooks (`MyDrive/silent-field/{data,runs}`).
-   Next: train `fno_mse_01` on Colab, run `03` on it, then implement B/B_S + the two controls
-   (review §4.2). The T-form far field in `03` has never been run on a trained model. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   **First run 2026-10-07 (Colab T4, code `bca1ed7`), `MyDrive/silent-field/runs/fno_mse_01/`:**
+   FNO 10.63M params, one-step MSE, 60 epochs in 6.7 min; train 7.05e-04, val 2.17e-03
+   (normalised). Teacher-forced `03` at M=0.1: field 3.04%, source 28.60%, **far field
+   (T-form) |p| 2.02%, complex 2.71%** (22 freqs, ω 0.154–78.5, 14 below c0·dk, 49% of the
+   stress's ω>0 power); div(u) error 0.182 (truth 9.2e-07); dilatational energy 5.35e-05.
+   **The far-field error is smaller than the field error — not blindness on this metric.**
+   Not yet understood. Candidate reasons, none checked: (a) teacher forcing re-anchors every
+   step to the truth, so large-scale/low-ω content (the compact term, which dominates the
+   T-form far field) is inherited from the input; (b) `relative_l2` over the band is
+   energy-weighted, dominated by the strongest low-ω bins; for contrast, 5% white velocity
+   noise gave 27% (smoke test). Next, before any claim: per-frequency far-field error
+   (above vs below c0·dk), the free-rollout control, B/B_S and the matched-random-error
+   control (review §4.2), then UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
