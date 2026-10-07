@@ -12,14 +12,31 @@ reframes Stage 4, corrects the M⁸/compactness decision, and audits `branch_ana
 (old commit `2535bb4` beside current code, every logged number asserted) and lay out Stages 3–4.
 Branch `tier0-review-notebooks`; remote `origin` = github.com/HSajeed/silent-field (private).
 **Session 2026-10-07:** review §5 steps 1–3 done (T-form far field + R_T; Stage-4 factor-2 fix;
-Mach scaling: radiated power follows the compact 2D law). Details in "Decisions", "Stage 4",
-"Open items". Stage 3 (training) is next.
+Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under way on Colab
+(`stage3_log.md`).
+
+## Resume here (end of session 2026-10-07)
+1. **Collect the pending Mach sweeps** (Mach is an analysis knob; no retraining). The user
+   launched `unet_mse_01` in the RunStage3 Colab notebook at session end; `fno_h1_01` and
+   `fno_mse_unroll4` remain. Read outputs with colab-mcp `get_cells(includeOutputs=true)`;
+   results also land on Drive (`runs/<run>/09_blindness_machs.json`, `runs/<run>/machs/`).
+   Then add them to `stage3_log.md` (Mach-sweep section) and summarise here (open item 7).
+2. **Decide experiment 5.** Candidates: noise-injection training; PDE-Refiner-style refinement;
+   the project's open question — a loss weighted by proximity to the sonic line over a time
+   window (the evidence so far says the lever is weighting in ω, not unrolling or H¹).
+   Also worth doing: rollout metrics need several seeds; one more dataset (`turb2d_kf16`).
+3. **Colab workflow:** `colabmcp.md` (local, untracked). The user pushes (the agent's shell
+   has no SSH key), connects the T4 and clicks the Drive consent. Notebook is "RunStage3"
+   (the agent's connect call once opened a stray "scratchpad" notebook — reuse the open one).
+   The auto-mode safety check on colab-mcp tools failed transiently at session end; if it
+   repeats, ask the user to run the cell and read the output with `get_cells`.
 
 ## Project in three lines
 Claim: L2-trained surrogates are blind to the acoustic field because the radiating
 cone (ω ≥ c0|k|) holds almost none of the energy, not because sound is high-k.
 Stages 1–2 (gate plus the k–ω headline metric) are done and hardened (Tier 0 on
-2026-09-30; T-form and Stage-4 fixes on 2026-10-07). Stage 3 (training) is not started.
+2026-09-30; T-form and Stage-4 fixes on 2026-10-07). Stage 3 (training + acoustic
+evaluation) is in progress — six trained runs, see open item 7 and `stage3_log.md`.
 Stage 4 is an *analysis*, not a training run.
 
 ## Current conclusions (M=0.1 unless noted)
@@ -209,152 +226,29 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
 5. **Comment nits in `scripts/00_validate_acoustics.py`:** preliminary checks still
    carry "CHECK 1/2" comment headers, and the CHECK 2 comment says "four-lobe".
 6. **Packaging:** `pyproject.toml` (git, `.gitignore` excluding `data/`, and the GitHub remote now exist).
-7. **Stage 3:** FNO/UNet training (`scripts/02`, `03`). Not started, but Colab-ready
-   (2026-10-07): both scripts take `--smoke` and `--out <run dir>`; `02` checks the dataset
-   sha256, checkpoints every epoch to `--ckpt-dir` (`/content/ckpt` on Colab), copies to
-   `--out` every `--save-every` epochs, resumes from `<out>/last.pt`, and both end with a
-   SUMMARY block. Smoke runs pass locally. The workflow and runner cell are in `colabmcp.md`
-   (local, untracked); Drive layout as the notebooks (`MyDrive/silent-field/{data,runs}`).
-   **First run 2026-10-07 (Colab T4, code `bca1ed7`), `MyDrive/silent-field/runs/fno_mse_01/`:**
-   FNO 10.63M params, one-step MSE, 60 epochs in 6.7 min; train 7.05e-04, val 2.17e-03
-   (normalised). Teacher-forced `03` at M=0.1: field 3.04%, source 28.60%, **far field
-   (T-form) |p| 2.02%, complex 2.71%** (22 freqs, ω 0.154–78.5, 14 below c0·dk, 49% of the
-   stress's ω>0 power); div(u) error 0.182 (truth 9.2e-07); dilatational energy 5.35e-05.
-   **Copy-the-input baseline** (predict t+1 = t; same metrics, local) and the box-mode band
-   (`--band-mode k`, ω ≥ c0·dk = 11.3, 0.28% of the stress power; `runs/fno_mse_01/band_k/`):
-
-   | error | FNO | copy input | FNO gain |
-   |---|---|---|---|
-   | field | 3.04% | 9.63% | 3.2× |
-   | Lighthill source | 28.60% | 31.55% | **1.1×** |
-   | far field \|p\|, ω band | 2.02% | 0.20% | 0.1× |
-   | far field complex, ω band | 2.71% | 18.90% | 7.0× |
-   | far field \|p\|, k band | 11.43% | 0.13% | 0.01× |
-   | far field complex, k band | 15.47% | 52.62% | 3.4× |
-
-   Readings: (1) **\|p\| is not a usable far-field metric** — magnitudes ignore timing, so
-   doing nothing scores best; report the complex error. (2) The ω-band far field is
-   dominated by the low-ω compact term, which teacher forcing nearly hands to the model.
-   (3) In the box-mode radiating band the complex error is 15.5%, **5× the field error**,
-   but the FNO's gain over copying there (3.4×) equals its gain on the field (3.2×): harder,
-   not selectively neglected — no B-type evidence yet. (4) **Training improves the source
-   only 1.1× over copying** while improving the field 3.2×: the clearest support so far,
-   at source level.
-   **Built 2026-10-07 (smoke-tested, not yet run on `fno_mse_01`):** `03` now reports the
-   complex error as primary, the copy-input baseline beside every number (`--no-baseline`
-   to skip) and per-frequency far-field error with below/above-c0·dk aggregates.
-   `scripts/09_blindness.py` computes B = R(error)/R(truth) and B_S = R_T(error)/R_T(truth)
-   (`tform.cone_share_refined(..., minus=)`), plus phase-free ratios R, R_T, P_rad of
-   prediction/truth, for five variants: FNO teacher-forced, FNO free rollout
-   (`train.predict_rollout`), copy-input, matched solenoidal white noise, and the model's own
-   error time-shuffled (the jitter test of review §4.2). Smoke (untrained model) already
-   shows matched white B ~6e3 and shuffled B ~5e5: any temporally incoherent error lands in
-   the cone, so B must be read against these controls.
-   **Run on `fno_mse_01` (Colab, `86fff8f`; `runs/fno_mse_01/eval_v2/03_errors.json`,
-   `runs/fno_mse_01/09_blindness.json`):**
-   - Per-frequency far-field complex error (teacher-forced, FNO vs copy-input): 0.3–1.0% vs
-     0.7–28% for ω < c0·dk; 7.2% vs 47% at ω=11.8; 63% vs 79% at 20.3; **263% vs 128% at 34.9;
-     678% vs 186% at 59.9** — above ω≈30 the model radiates more than the true flow and is
-     worse than copying. Aggregates: 0.86% below c0·dk, 18.97% above.
-   - `09` (M=0.1): B / B_S / R_pred/R_truth / R_T ratio / P_rad ratio:
-     fno_tf 4.71e3 / 9.24 / 5.92 / 1.64 / 1.00; fno_rollout (1023 steps, all finite, field
-     err 136%) 19 / 1.41 / **34.9** / 1.75 / 0.776; copy_input 21.5 / 3.16 / 0.994 / 0.997 /
-     0.999; white_matched 9.46e4 / 6.08e3 / 98 / 98.8 / 1.13; shuffled_error 5.95e5 / 6.64e3
-     / 705 / 511 / 1.68.
-   - Reading (interpretation, not proven): the model's error is far more cone-concentrated
-     than the signal (B=4.7e3) but 20–130× *less* than an equally large temporally incoherent
-     error, and far more than a coherent one (copy-input 21.5). If B mixes linearly, ≈0.8% of
-     the error energy behaves like step-to-step jitter, and that jitter carries the cone
-     content — review §4.2's jitter hypothesis is supported. The MSE barely sees that jitter
-     (it is ~1% of a 3% error), yet it puts spurious supersonic content into the prediction
-     (R 6× truth teacher-forced, 35× in rollout) and spurious high-frequency sound. Total
-     radiated power stays right (compact, low-ω term). Next: UNet, Sobolev (standard H¹),
-     multi-step loss; test whether a temporal-derivative/multi-step objective lowers B.
-   **Built (smoke-tested):** `scripts/10_error_diagnostic.py` — (k, ω) error map, per-|k|-shell
-   lag-1 temporal correlation of error vs truth, error share in the cone-k range and in the
-   aliasing band (|k| > 2/3 k_max), low-k ω-spectrum of error vs truth; model vs copy-input.
-   `09` variants renamed `model_tf`/`model_rollout` (the fno_mse_01 JSON still says `fno_*`).
-   Plan agreed 2026-10-07: run `10` on FNO + train/evaluate UNet; then FNO with standard H¹ and
-   with an unrolled multi-step loss; later noise injection / PDE-Refiner.
-   **Experiments 1–2 done (Colab T4, `63c2bba`).** UNet `runs/unet_mse_01/` (4.33M params,
-   60 ep in 12.1 min, val 9.2e-04, best 7.6e-04). FNO | UNet (copy-input):
-
-   | measure (M=0.1, teacher-forced unless noted) | FNO | UNet | copy |
-   |---|---|---|---|
-   | field / source error | 3.04% / 28.6% | 1.60% / 17.8% | 9.63% / 31.6% |
-   | far field complex: all / below / above c0·dk | 2.71 / 0.86 / 19.0% | 2.50 / 2.02 / 11.0% | 18.9 / 17.7 / 52.2% |
-   | far field complex at ω=34.9 / 59.9 | 263% / 678% | 132% / 388% | 128% / 186% |
-   | B / B_S | 4.71e3 / 9.24 | 3.93e3 / 6.97 | 21.5 / 3.16 |
-   | controls B: matched white / shuffled | 9.46e4 / 5.95e5 | 9.49e4 / 5.02e6 | |
-   | R_pred/R_truth: teacher-forced / rollout | 5.92 / 34.9 | 1.91 / 3.72 | 0.994 |
-   | radiated power ratio, rollout | 0.776 | 0.714 | |
-   | low-k error PSD flatness, high-ω/mid-ω (truth 2.4e-9) | 1.4e-3 | 2.1e-4 | 1.2e-7 |
-   | low-k error ÷ truth: high ω / mid ω | 191 / 3.2e-4 | 17.9 / 2.0e-4 | 2.2 / 4.5e-2 |
-   | cone error from |k|=1 shell | 39% | 58% | |
-   | aliasing band (|k|>42.7): error share / lag-1 corr (truth 0.64) | 17% / 0.29 | 26% / 0.48 | 2% / 0.11 |
-
-   Reading (interpretation): **both architectures show the same signature**, so it is the
-   objective, not the FNO. The cone error sits in the lowest shells with a near-white ω
-   spectrum that exceeds the true signal at high ω (191× FNO, 18× UNet) while being
-   ~1e-4 of it at mid ω — the jitter fingerprint. The aliasing-band error is itself
-   incoherent (not deterministic folding) and is not where the cone error lives, so
-   aliasing is not the explanation. B barely moves between models (4.7e3 → 3.9e3) although
-   the field error halves: B characterises the objective, not the model quality. Caveat:
-   the energy-weighted lag-1 correlation is dominated by low-ω error and is not decisive
-   on its own. Next: FNO with standard H¹ (expect no B change) and with an unrolled
-   multi-step loss (jitter account predicts B and the high-ω far-field excess drop).
-   **Built for experiments 3–4 (smoke-tested):** `--loss h1` = standard relative H¹
-   (`losses.h1_loss`, neuraloperator-style ||e||_H1/||y||_H1, multiplicative (1+k²), full-plane
-   fft2); `--unroll K` = backprop through K autoregressive steps (`train.make_windows`; unroll=1
-   reproduces one-step training exactly — test). Validation stays one-step MSE so runs compare.
-   Runs: `fno_h1_01` (`--loss h1`), `fno_mse_unroll4` (`--unroll 4`, ~4× the FNO time).
-   **Experiments 3–4 done (Colab T4, `3682580`).** `fno_h1_01` 7.0 min, one-step val MSE
-   5.48e-03 final (best 2.03e-03: H¹ trades L2 accuracy away as it trains); `fno_mse_unroll4`
-   22.7 min, one-step val 3.18e-03. Teacher-forced unless noted, M=0.1:
-
-   | measure | FNO mse | FNO **h1** | FNO mse **unroll4** | UNet mse |
-   |---|---|---|---|---|
-   | field / source error | 3.04 / 28.6% | 3.23 / 44.8% | 3.89 / 35.7% | 1.60 / 17.8% |
-   | far field complex, ω ≥ c0·dk | 19.0% | 60.6% | 21.0% | 11.0% |
-   | far field at ω=34.9 / 59.9 | 263 / 678% | 911 / 2617% | 311 / 802% | 132 / 388% |
-   | B / B_S | 4.71e3 / 9.24 | **1.08e5** / 68.2 | 3.70e3 / 9.34 | 3.93e3 / 6.97 |
-   | low-k error ÷ truth at high ω | 191 | 2720 | 349 | 17.9 |
-   | rollout: R/R0 / R_T/R_T0 / P/P0 | 34.9 / 1.75 / 0.78 | 1340 / 9.88 / 2.42 | 13.1 / 1.08 / 0.44 | 3.72 / 0.99 / 0.71 |
-
-   Reading (interpretation; single seed each — seed variance not yet measured):
-   - **The standard H¹ remedy makes the acoustics much worse** (B 23×, high-ω far field 3–4×,
-     rollout radiates 2.4× the true power) at an unchanged field error. Matches PDE-Refiner
-     (Sobolev hurt there) and `scripts/06` (multiplicative H¹ moves weight off the cone).
-   - **Unrolling (4 steps, backprop through all) does not fix it.** Teacher-forced B −21%,
-     high-ω excess slightly *worse*; it helps rollout statistics (spurious cone share 35×→13×,
-     R_T ratio 1.75→1.08) but under-radiates (P 0.44). The jitter-account prediction
-     ("unrolling removes the jitter") is **not confirmed**.
-   - **B tracks the objective's weighting, not the model or the training horizon:** ~4e3 for
-     every MSE variant (FNO, UNet, unrolled), 1.1e5 under H¹. An unrolled MSE is still
-     amplitude-weighted, so the low-amplitude, high-ω jitter stays invisible to it. The lever
-     is the weighting in ω, i.e. the README's open question (a cone/temporal-frequency-
-     weighted objective over a time window), with noise injection and PDE-Refiner as the
-     literature baselines.
-   **Seeding (2026-10-07):** runs up to `f261e06` built the model before seeding, so their
-   weight initialisation was unseeded (batch order was seeded, seed 0). `scripts/02 --seed N`
-   now seeds both; two `--seed 1` smoke runs are identical. Seed runs: `fno_mse_s1`, `fno_mse_s2`.
-   **Mach sweep (built, smoke-tested):** every Stage-3 number so far is at M=0.1. Mach is an
-   analysis knob (c0 = U/M; predictions unchanged), so no retraining: `09 --machs 0.05 0.1 0.2
-   0.3` (writes `09_blindness_machs.json`; spectra computed once, reused per Mach) and
-   `03 --extra-machs 0.05 0.2 0.3` (far-field complex error per Mach in `far_field_by_mach`).
-   Expectation [unverified]: the cone widens with M (|k| ≤ 3.5 / 6.9 / ~21 at M = 0.05 / 0.1 /
-   0.3) and takes in better-predicted modes, so B should fall with M — blindness strongest at
-   low Mach. Incompressible Lighthill is only valid for M ≪ 1, so stop at 0.3.
-   **Seed runs done (`0e580c3`): FNO mse seeds 0/1/2** (`fno_mse_01`, `_s1`, `_s2`):
-   val 2.17/2.30/2.52e-3; field 3.04/3.09/3.16%; source 28.6/29.5/30.8%; far field above
-   c0·dk 19.0/19.6/22.7%; **B 4.71/4.92/5.56e3 (±9%)**; B_S 9.24/9.33/9.51; low-k error/truth at
-   high ω 191/208/226. Rollout metrics are seed-dominated: R/R0 35/62/49, R_T ratio 1.75/14/0.77,
-   P/P0 0.78/0.49/1.11. Consequences: teacher-forced conclusions stand (H¹ ~20× in B is far
-   outside seed spread); unroll4's B 3.70e3 and UNet's 3.93e3 sit just below the seed range
-   (possibly small real effects); unroll4's high-ω excess (349) is outside it (worse);
-   **no rollout comparison from a single run is meaningful** — needs seeds or longer averages. For any trained Stage-4 run use the standard multiplicative H¹ loss
-   (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
-8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
+7. **Stage 3 — in progress. Full record: `stage3_log.md`.** Six trained runs on Drive
+   (`MyDrive/silent-field/runs/`): FNO MSE ×3 seeds, UNet MSE, FNO relative-H¹, FNO MSE
+   unrolled ×4. Tools: `scripts/02` (train; `--loss mse|sobolev|h1`, `--unroll K`, `--seed`,
+   `--smoke`, resumable), `03` (error triple, complex far field + copy-input baseline +
+   per-frequency, `--extra-machs`), `09` (B, B_S + controls, `--machs`), `10` (jitter vs
+   aliasing). Findings so far (M=0.1 unless noted; interpretation where marked):
+   - Field error 1.6–3.2% but source error 18–45%; training improves the source only 1.1×
+     over copying the input (FNO). The |p| far-field metric is unusable (copying scores best).
+   - Far field above c0·dk: 19–23% (FNO seeds), 11% (UNet); at the top frequencies the model
+     radiates more than the truth (FNO 678% at ω=59.9; copying 186%).
+   - B ≈ 4.7–5.6e3 for every MSE model (seed spread ±9%), between a coherent error (21) and
+     time-incoherent noise (≥9.5e4): ~1% of the error is step-to-step jitter, with a
+     near-white low-k ω spectrum 18–226× above the true signal at high ω (`10`); aliasing
+     ruled out. Same in UNet → it is the objective, not the architecture.
+   - **Standard H¹ makes it ~20× worse** (B 1.1e5, high-ω far field 3–4×). **Unrolling ×4
+     does not fix it** (B −21%, just below seed spread; high-ω excess worse). Interpretation:
+     any amplitude-weighted loss leaves the jitter invisible; a fix must reweight in ω.
+   - **Mach:** B falls ~M⁻⁶ (1.2e6 at M=0.05 → 29 at 0.3); radiating-band far-field error
+     218% → 3.9%. Blindness is a low-Mach effect; B_S stays 5–11. (FNO only so far.)
+   - Rollout metrics are seed-dominated (radiated power 0.49–1.11 across seeds): never rank
+     models on one rollout.
+   For any trained Stage-4 run use the standard multiplicative H¹ loss (neuraloperator
+   `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 
 ## Working style
 The main agent orchestrates. It delegates execution to the `coder` and `logger` subagents

@@ -64,6 +64,18 @@ reachable by the trained one, and what an earlier version of this file wrongly r
 the trained one. A frequency-based fix cannot repair an amplitude-based blindness.)
 
 
+## Stage 3 — what trained surrogates actually get wrong (in progress)
+
+Six FNO/UNet runs (one-step MSE, three seeds; relative H¹; 4-step unrolled MSE) are evaluated
+against the truth and against two trivial references: copying the input, and noise of the same
+size. The full record is in `stage3_log.md`. Provisional, at M = 0.1:
+
+- **The flow looks right; the sound source doesn't.** Field error is 1.6–3.2%, but Lighthill-source error is 18–45%. Training improves the source only 1.1× over copying the previous snapshot.
+- **The error is over-represented in the radiating cone by B ≈ 5×10³** for every MSE model, FNO or UNet (seeds within ±9%). Its signature is step-to-step jitter: a near-white frequency spectrum at the lowest wavenumbers that exceeds the true signal there by 18–226× at high ω. Aliasing is ruled out. At the highest frequencies the models radiate more sound than the real flow.
+- **The standard remedies don't help.** A standard H¹ loss makes B ~20× worse. Unrolled training does not remove the jitter.
+- **It is a low-Mach effect.** B falls roughly as M⁻⁶, from 1.2×10⁶ at M = 0.05 to 29 at M = 0.3 (FNO; other models pending).
+- **Use the complex far-field error.** Comparing far-field *magnitudes* is blind to timing: copying the input scores best on it.
+
 ## Reproduce
 
 ```bash
@@ -73,6 +85,12 @@ python scripts/04_komega_analysis.py         # the headline number — no model 
 python scripts/06_sobolev_argument.py        # why Sobolev cannot help — no model needed
 python scripts/07_tform_metric.py            # T-form cone share R_T (includes sub-dk content)
 python scripts/08_mach_scaling.py           # radiated power vs Mach: the compact 2D law
+```
+
+Stage-3 evaluation of a trained run (GPU via Colab; see `stage3_log.md`):
+```bash
+python scripts/09_blindness.py --model runs/<run>/model.pt --out runs/<run> --machs 0.05 0.1 0.2 0.3
+python scripts/10_error_diagnostic.py --model runs/<run>/model.pt --out runs/<run>/diag
 ```
 
 `scripts/01_generate_data.py` regenerates the dataset if `data/` is missing. The
