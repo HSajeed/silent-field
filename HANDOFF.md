@@ -307,7 +307,34 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    (`losses.h1_loss`, neuraloperator-style ||e||_H1/||y||_H1, multiplicative (1+k²), full-plane
    fft2); `--unroll K` = backprop through K autoregressive steps (`train.make_windows`; unroll=1
    reproduces one-step training exactly — test). Validation stays one-step MSE so runs compare.
-   Runs: `fno_h1_01` (`--loss h1`), `fno_mse_unroll4` (`--unroll 4`, ~4× the FNO time). For any trained Stage-4 run use the standard multiplicative H¹ loss
+   Runs: `fno_h1_01` (`--loss h1`), `fno_mse_unroll4` (`--unroll 4`, ~4× the FNO time).
+   **Experiments 3–4 done (Colab T4, `3682580`).** `fno_h1_01` 7.0 min, one-step val MSE
+   5.48e-03 final (best 2.03e-03: H¹ trades L2 accuracy away as it trains); `fno_mse_unroll4`
+   22.7 min, one-step val 3.18e-03. Teacher-forced unless noted, M=0.1:
+
+   | measure | FNO mse | FNO **h1** | FNO mse **unroll4** | UNet mse |
+   |---|---|---|---|---|
+   | field / source error | 3.04 / 28.6% | 3.23 / 44.8% | 3.89 / 35.7% | 1.60 / 17.8% |
+   | far field complex, ω ≥ c0·dk | 19.0% | 60.6% | 21.0% | 11.0% |
+   | far field at ω=34.9 / 59.9 | 263 / 678% | 911 / 2617% | 311 / 802% | 132 / 388% |
+   | B / B_S | 4.71e3 / 9.24 | **1.08e5** / 68.2 | 3.70e3 / 9.34 | 3.93e3 / 6.97 |
+   | low-k error ÷ truth at high ω | 191 | 2720 | 349 | 17.9 |
+   | rollout: R/R0 / R_T/R_T0 / P/P0 | 34.9 / 1.75 / 0.78 | 1340 / 9.88 / 2.42 | 13.1 / 1.08 / 0.44 | 3.72 / 0.99 / 0.71 |
+
+   Reading (interpretation; single seed each — seed variance not yet measured):
+   - **The standard H¹ remedy makes the acoustics much worse** (B 23×, high-ω far field 3–4×,
+     rollout radiates 2.4× the true power) at an unchanged field error. Matches PDE-Refiner
+     (Sobolev hurt there) and `scripts/06` (multiplicative H¹ moves weight off the cone).
+   - **Unrolling (4 steps, backprop through all) does not fix it.** Teacher-forced B −21%,
+     high-ω excess slightly *worse*; it helps rollout statistics (spurious cone share 35×→13×,
+     R_T ratio 1.75→1.08) but under-radiates (P 0.44). The jitter-account prediction
+     ("unrolling removes the jitter") is **not confirmed**.
+   - **B tracks the objective's weighting, not the model or the training horizon:** ~4e3 for
+     every MSE variant (FNO, UNet, unrolled), 1.1e5 under H¹. An unrolled MSE is still
+     amplitude-weighted, so the low-amplitude, high-ω jitter stays invisible to it. The lever
+     is the weighting in ω, i.e. the README's open question (a cone/temporal-frequency-
+     weighted objective over a time window), with noise injection and PDE-Refiner as the
+     literature baselines. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
