@@ -52,7 +52,14 @@ def denormalise(arr, stats):
     return arr * stats["std"] + stats["mean"]
 
 
-def train(model, x, y, cfg: TrainConfig):
+def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
+    """Train with the vanilla recipe.
+
+    on_epoch_end(epoch, model, opt, sched, history) is called after every epoch, for
+    checkpointing; it must not change training state.  `resume` is a dict saved from
+    that callback (keys model, opt, sched, history, rng) and continues the run exactly
+    where it stopped -- the recipe is unchanged either way.
+    """
     torch.manual_seed(cfg.seed)
     n_val = max(1, int(len(x) * cfg.val_fraction))
     xt, yt, xv, yv = x[:-n_val], y[:-n_val], x[-n_val:], y[-n_val:]
@@ -61,6 +68,13 @@ def train(model, x, y, cfg: TrainConfig):
     model = model.to(cfg.device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg.epochs)
+    history = []
+    if resume is not None:
+        model.load_state_dict(resume["model"])
+        opt.load_state_dict(resume["opt"])
+        sched.load_state_dict(resume["sched"])
+        history = list(resume["history"])
+        torch.set_rng_state(resume["rng"])
 
     def criterion(p, t):
         if cfg.loss == "mse":
@@ -69,8 +83,7 @@ def train(model, x, y, cfg: TrainConfig):
             return sobolev_loss(p, t, cfg.sobolev_order, cfg.sobolev_weight, cfg.domain_length)
         raise ValueError(cfg.loss)
 
-    history = []
-    for epoch in range(cfg.epochs):
+    for epoch in range(len(history), cfg.epochs):
         model.train()
         running = 0.0
         for xb, yb in loader:
@@ -88,6 +101,8 @@ def train(model, x, y, cfg: TrainConfig):
         history.append({"epoch": epoch, "train": running / len(xt), "val": val})
         if epoch % max(1, cfg.epochs // 10) == 0:
             print(f"  epoch {epoch:3d}  train {running/len(xt):.3e}  val {val:.3e}")
+        if on_epoch_end is not None:
+            on_epoch_end(epoch, model, opt, sched, history)
     return model, history
 
 
