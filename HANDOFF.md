@@ -247,8 +247,27 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    (`train.predict_rollout`), copy-input, matched solenoidal white noise, and the model's own
    error time-shuffled (the jitter test of review §4.2). Smoke (untrained model) already
    shows matched white B ~6e3 and shuffled B ~5e5: any temporally incoherent error lands in
-   the cone, so B must be read against these controls. Next: run new `03` and `09` on
-   `fno_mse_01` (Colab), then UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   the cone, so B must be read against these controls.
+   **Run on `fno_mse_01` (Colab, `86fff8f`; `runs/fno_mse_01/eval_v2/03_errors.json`,
+   `runs/fno_mse_01/09_blindness.json`):**
+   - Per-frequency far-field complex error (teacher-forced, FNO vs copy-input): 0.3–1.0% vs
+     0.7–28% for ω < c0·dk; 7.2% vs 47% at ω=11.8; 63% vs 79% at 20.3; **263% vs 128% at 34.9;
+     678% vs 186% at 59.9** — above ω≈30 the model radiates more than the true flow and is
+     worse than copying. Aggregates: 0.86% below c0·dk, 18.97% above.
+   - `09` (M=0.1): B / B_S / R_pred/R_truth / R_T ratio / P_rad ratio:
+     fno_tf 4.71e3 / 9.24 / 5.92 / 1.64 / 1.00; fno_rollout (1023 steps, all finite, field
+     err 136%) 19 / 1.41 / **34.9** / 1.75 / 0.776; copy_input 21.5 / 3.16 / 0.994 / 0.997 /
+     0.999; white_matched 9.46e4 / 6.08e3 / 98 / 98.8 / 1.13; shuffled_error 5.95e5 / 6.64e3
+     / 705 / 511 / 1.68.
+   - Reading (interpretation, not proven): the model's error is far more cone-concentrated
+     than the signal (B=4.7e3) but 20–130× *less* than an equally large temporally incoherent
+     error, and far more than a coherent one (copy-input 21.5). If B mixes linearly, ≈0.8% of
+     the error energy behaves like step-to-step jitter, and that jitter carries the cone
+     content — review §4.2's jitter hypothesis is supported. The MSE barely sees that jitter
+     (it is ~1% of a 3% error), yet it puts spurious supersonic content into the prediction
+     (R 6× truth teacher-forced, 35× in rollout) and spurious high-frequency sound. Total
+     radiated power stays right (compact, low-ω term). Next: UNet, Sobolev (standard H¹),
+     multi-step loss; test whether a temporal-derivative/multi-step objective lowers B. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
