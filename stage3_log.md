@@ -13,7 +13,7 @@ All runs: Colab T4, data `data/turb2d.npz` (sha256-verified), outputs on Drive u
 | `fno_mse_01` | FNO, MSE | 0 (init unseeded) | 2.17e-3 | + `eval_v2/`, `band_k/`, `diag/`, `machs/`, `09_blindness_machs.json` |
 | `fno_mse_s1` | FNO, MSE | 1 | 2.30e-3 | 03/09/10 |
 | `fno_mse_s2` | FNO, MSE | 2 | 2.52e-3 | 03/09/10 |
-| `unet_mse_01` | UNet, MSE | 0 (init unseeded) | 9.2e-4 | 03/09/10; Mach sweep running at session end |
+| `unet_mse_01` | UNet, MSE | 0 (init unseeded) | 9.2e-4 | 03/09/10, Mach sweep |
 | `fno_h1_01` | FNO, relative H¹ | 0 (init unseeded) | 5.48e-3 (best 2.03e-3) | 03/09/10 |
 | `fno_mse_unroll4` | FNO, MSE unrolled ×4 | 0 (init unseeded) | 3.18e-3 | 03/09/10 |
 
@@ -197,5 +197,45 @@ Same trend as the FNO: B ∝ ~M⁻⁵ (5.3e5 → 38), and at M = 0.05 the radiat
 worse than copying for **both** architectures; B_S flat at 6–8. Low-Mach blindness is not
 architecture-specific.
 
-**Pending:** the same sweep for `fno_h1_01` and `fno_mse_unroll4`. Runner: in RunStage3 change only `RUN = f"{ROOT}/runs/<run>"`;
-the cell runs `09 --machs 0.05 0.1 0.2 0.3` then `03 --extra-machs 0.05 0.2 0.3 --out {RUN}/machs`.
+**`fno_h1_01`** (run 2026-10-07 on a fresh T4 runtime; code as pulled from `tier0-review-notebooks`
+at `44da032`; `09_blindness_machs.json`, `machs/03_errors.json`), teacher-forced:
+
+| M | B model | B white | B copy | B_S | R_pred/R_truth | far field above c0·dk: model / copy | P/P0 rollout |
+|---|---|---|---|---|---|---|---|
+| 0.05 | 2.53e7 | 4.18e7 | 66.9 | 82.6 | 1.7e4 | 635% / 107% | 2.19 |
+| 0.1 | 1.08e5 | 9.52e4 | 21.5 | 68.2 | 73.4 | 60.6% / 52.2% | 2.42 |
+| 0.2 | 4.07e3 | 2.58e3 | 7.94 | 44.4 | 3.70 | 16.6% / 33.4% | 2.44 |
+| 0.3 | 671 | 450 | 4.92 | 28.3 | 1.43 | 11.3% / 27.8% | 2.45 |
+
+B is 21 / 23 / 26 / 23× the `fno_mse_01` value at M = 0.05 / 0.1 / 0.2 / 0.3, i.e. the H¹ penalty is
+Mach-independent to ~25%. B ∝ ~M⁻⁶ (2.5e7 → 671), same as MSE. At M ≥ 0.1 B reaches or exceeds
+the matched-white control (1.08e5 vs 9.5e4 at M=0.1) — the model's error is as cone-concentrated
+as incoherent noise. B_S falls with M (82.6 → 28.3) but stays 3–8× the MSE values. All-band far
+field complex error 8–9% at every Mach (MSE 2.6–2.8%); below c0·dk 3.7% at M=0.1 (MSE 0.86%).
+Rollout radiates 2.2–2.5× the true power at every Mach. M=0.05 radiating band is the worst case
+(635%, 6× copying).
+
+**`fno_mse_unroll4`** (same session; `09_blindness_machs.json`, `machs/03_errors.json`), teacher-forced:
+
+| M | B model | B white | B copy | B_S | R_pred/R_truth | far field above c0·dk: model / copy | P/P0 rollout |
+|---|---|---|---|---|---|---|---|
+| 0.05 | 1.12e6 | 4.16e7 | 66.9 | 10.3 | 1950 | 241% / 107% | 0.41 |
+| 0.1 | 3.70e3 | 9.45e4 | 21.5 | 9.34 | 7.39 | 21.0% / 52.2% | 0.44 |
+| 0.2 | 123 | 2.58e3 | 7.94 | 6.23 | 1.21 | 5.8% / 33.4% | 0.48 |
+| 0.3 | 22.4 | 449 | 4.92 | 4.52 | 1.04 | 4.4% / 27.8% | 0.50 |
+
+Versus `fno_mse_01`: B is −9 / −21 / −20 / −23% at M = 0.05 / 0.1 / 0.2 / 0.3 (seed spread at M=0.1 is
+±9%, so the M ≥ 0.1 reductions are modestly outside it; single seed each); the radiating-band far
+field is 10–12% *worse* (241 / 21.0 / 5.8 / 4.4% vs 218 / 19.0 / 5.0 / 3.9%), and B_S is about the
+same (10.3 → 4.5). All-band far field 3.0–3.2% at every Mach. Rollout is the one clear change:
+B_rollout 7.7 at M=0.1 (FNO 19) and falling to 0.86 at M=0.3, R_T ratio 1.08, but P/P0 0.41–0.50
+(under-radiates; FNO 0.75–0.80). So the same pattern at every Mach as at M=0.1: unrolling changes
+rollout statistics, not the teacher-forced cone error.
+
+**Mach-sweep summary (4 runs).** Teacher-forced B falls ~M⁻⁵–M⁻⁶ for every run; at M=0.05 the
+radiating-band far field is worse than copying for all four (UNet 120%, FNO 218%, unroll4 241%,
+H¹ 635%, copy 107%). The ordering of the objectives (H¹ ≫ MSE ≈ unroll4 ≈ UNet in B) is the same at
+every Mach, so the M=0.1 conclusions are not specific to that Mach. B_S is not flat in M for any run
+(FNO 10.6 → 5.6, unroll4 10.3 → 4.5, H¹ 83 → 28; UNet 7.6 → 6.7), only much less steep than B.
+The earlier statement "B_S nearly Mach-independent" is softened to "falls ≤3× over a 6× range of M".
+Still one dataset, one seed per non-FNO-MSE run.
