@@ -134,6 +134,8 @@ def main():
     ap.add_argument("--data", default="data/turb2d.npz")
     ap.add_argument("--model", default="runs/model.pt")
     ap.add_argument("--mach", type=float, default=0.1)
+    ap.add_argument("--extra-machs", type=float, nargs="*", default=[],
+                    help="also report the far-field complex error at these Mach numbers")
     ap.add_argument("--n-obs", type=int, default=36)
     ap.add_argument("--n-band", type=int, default=24,
                     help="number of radiating frequencies in the far-field band.")
@@ -237,9 +239,31 @@ def main():
               + (f"{r['err_copy']:>12.2%}" if base else ""))
     print("\nThe field error is what gets published. The far-field complex error is what the flow sounds like.")
 
+    by_mach = {}
+    for m in [args.mach] + list(args.extra_machs):
+        if m == args.mach:
+            e, f = errs, ffb
+        else:
+            e, _ = far_field_error(ut, vt, up, vp, grid, dt, sound_speed(u_rms, m), args.n_obs,
+                                   args.n_band, args.band_mode, args.min_cone_fraction,
+                                   baseline=(up_b, vp_b) if base else None)
+            f = e.pop("baseline_far_field", None)
+        keys = ("far_field_complex", "far_field_complex_below_c0dk", "far_field_complex_above_c0dk")
+        by_mach[f"{m:g}"] = {"model": {k: e[k] for k in keys},
+                             "copy_input": ({k: f[k] for k in keys} if f else None)}
+    if args.extra_machs:
+        print("\nfar-field complex error by Mach (model | copy-input): all / below c0*dk / above c0*dk")
+        for m, d in by_mach.items():
+            mm, cc = d["model"], d["copy_input"]
+            print(f"  M={m:<5} model " + " / ".join(pct_ for pct_ in
+                  (f"{mm[k]:.2%}" if mm[k] is not None else "n/a" for k in mm))
+                  + ("   copy " + " / ".join(f"{cc[k]:.2%}" if cc[k] is not None else "n/a" for k in cc)
+                     if cc else ""))
+
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     (out/"03_errors.json").write_text(json.dumps(
         {**trip, **errs, "baseline_copy_input": ({**trip_b, **ffb} if base else None),
+         "far_field_by_mach": by_mach,
          "mach": args.mach, "c0": c0, "far_field_band": meta,
          "model": str(args.model), "data": args.data, "smoke": args.smoke},
         indent=2))
