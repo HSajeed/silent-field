@@ -115,6 +115,12 @@ def radiating_band(
                 prediction, so the comparison stays fair.  Use when the low modes turn
                 out to be nearly empty.
 
+    mode="omega" n_band frequencies log-spaced from the first nonzero bin to the last,
+                with no radiation-condition cut.  For the T-form
+                (`far_field_pressure_ibp`): the box-integrated stress (k = 0, the compact
+                term) radiates at every omega > 0 and dominates at omega < c0 * dk, so
+                the S-form's cut would discard the band that carries most of the sound.
+
     Returns the indices and a metadata dict, because a band nobody can audit is how
     the original bug survived: `source_power_fraction_captured` and
     `radiating_power_fraction_available` say directly how much of the radiating
@@ -125,13 +131,17 @@ def radiating_band(
     omega_min = c0 * dk
 
     radiating = np.nonzero(omega >= omega_min)[0]
-    if radiating.size == 0:
+    if mode == "omega":
+        radiating = np.nonzero(omega > 0)[0]
+        targets = np.geomspace(omega[1], omega.max(), n_band)
+        idx = sorted({int(np.argmin(np.abs(omega - t))) for t in targets})
+    elif radiating.size == 0:
         return [], {"mode": mode, "n_radiating_available": 0,
                     "error": f"no frequency reaches the radiation condition "
                              f"(omega >= c0*dk = {omega_min:.3f}, "
                              f"omega_max = {omega.max():.3f}); the record is too short"}
 
-    if mode == "k":
+    elif mode == "k":
         k_max = float(omega.max() / c0 / dk)
         if k_max <= 1.0:
             return [], {"mode": mode, "n_radiating_available": int(radiating.size),
@@ -148,7 +158,7 @@ def radiating_band(
         order = radiating[np.argsort(p[radiating])[::-1][:n_band]]
         idx = sorted(int(i) for i in order)
     else:
-        raise ValueError(f"unknown band mode {mode!r}; expected 'k' or 'top'")
+        raise ValueError(f"unknown band mode {mode!r}; expected 'k', 'top' or 'omega'")
 
     meta = {
         "mode": mode,
@@ -194,6 +204,10 @@ def select_band(
     needs a trained checkpoint to reach this point, so a fallback nobody can test is
     a fallback nobody should rely on.
     """
+    if mode == "omega":
+        idx, meta = radiating_band(omega, c0, grid, n_band, mode="omega", power=power, radius=radius)
+        meta["band_mode_requested"] = mode
+        return idx, meta
     idx, meta = radiating_band(omega, c0, grid, n_band, mode="k", power=power, radius=radius)
     meta["band_mode_requested"] = mode
     if mode != "auto" or not idx:
@@ -275,6 +289,7 @@ def far_field_pressure_ibp(
     c0: float,
     omega_indices=None,
     max_kernel_evals: float = 5e7,
+    far_field: bool = True,
 ) -> np.ndarray:
     """Far-field pressure with the double divergence moved onto the Green's
     function by parts, i.e.
@@ -288,6 +303,17 @@ def far_field_pressure_ibp(
 
     stress_hat : dict with keys 'uu', 'uv', 'vv', each (n_omega, ny, nx) complex,
                  already multiplied by rho0.
+    far_field  : True keeps only the leading -k^2 n_i n_j G term of d_i d_j G, whose
+                 dropped terms are O(1/kr) -- measured 2.6% at kr = 77, 0.6% at kr = 308
+                 on the vortex pair.  False uses the exact second derivatives of
+                 (-i/4) H_0^(2)(kr), valid at any kr.
+
+    This is the form to use for turbulence in a periodic box (Sarkar & Hussaini 1993,
+    their Eq. 2): `far_field_pressure` applied to S = d_i d_j T_ij also integrates the
+    surface term left by velocity that does not vanish at the box edge.  On the vortex
+    pair at its tone, with exact kernels, the two forms differ by 5.3% at L = 2 pi,
+    0.73% at 4 pi and 0.05% at 8 pi (independent of r) -- that difference is the
+    surface term, not an error in either path.
 
     See `far_field_pressure` for the meaning of `max_kernel_evals`.
     """
@@ -320,16 +346,26 @@ def far_field_pressure_ibp(
             r = np.maximum(np.hypot(dx, dy), 1e-12)
             kr = k * r
 
-            # Far-field second derivatives of G: the leading term differentiates
-            # the exp(-i k r) phase twice, giving (-ik)^2 n_i n_j G = -k^2 n_i n_j
-            # G, with n the unit vector from source to observer -- the sign is
-            # unchanged by the outgoing-vs-incoming convention since it enters
-            # squared.  Curvature terms are O(1/(kr)) smaller.
-            g = greens_2d(k, r, far_field=True)
             nx_, ny_ = dx / r, dy / r
-            d2g_xx = -(k**2) * nx_ * nx_ * g
-            d2g_xy = -(k**2) * nx_ * ny_ * g
-            d2g_yy = -(k**2) * ny_ * ny_ * g
+            if far_field:
+                # Far-field second derivatives of G: the leading term differentiates
+                # the exp(-i k r) phase twice, giving (-ik)^2 n_i n_j G = -k^2 n_i n_j
+                # G, with n the unit vector from source to observer -- the sign is
+                # unchanged by the outgoing-vs-incoming convention since it enters
+                # squared.  Curvature terms are O(1/(kr)) smaller.
+                g = greens_2d(k, r, far_field=True)
+                d2g_xx = -(k**2) * nx_ * nx_ * g
+                d2g_xy = -(k**2) * nx_ * ny_ * g
+                d2g_yy = -(k**2) * ny_ * ny_ * g
+            else:
+                # Exact: d_i d_j G(r) = G'' n_i n_j + (G'/r)(delta_ij - n_i n_j), with
+                # G' = (ik/4) H_1^(2)(kr) and G'' = (ik^2/4)(H_0^(2) - H_1^(2)/(kr)).
+                h0, h1 = hankel2(0, kr), hankel2(1, kr)
+                g2 = 0.25j * k**2 * (h0 - h1 / kr)
+                g1_r = 0.25j * k * h1 / r
+                d2g_xx = g2 * nx_ * nx_ + g1_r * (1.0 - nx_ * nx_)
+                d2g_xy = (g2 - g1_r) * nx_ * ny_
+                d2g_yy = g2 * ny_ * ny_ + g1_r * (1.0 - ny_ * ny_)
 
             out[row, j] = np.sum(d2g_xx * uu + 2.0 * d2g_xy * uv + d2g_yy * vv) * dA
     return out

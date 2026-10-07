@@ -88,22 +88,52 @@ def test_halfplane_mean_weight_matches_losses_k_grid():
         assert abs(sobolev_halfplane_mean_weight(GRID, order) / expected - 1.0) < 1e-6
 
 
-def test_additive_weight_is_one_plus_scaled_sobolev_weight():
-    """Elementwise against the torch weight `sobolev_loss` builds, and against the
-    N_cells / N_half ratio its two normalisations imply.  This is the test that stops
-    `radiating.py` and `losses.py` drifting apart."""
-    order, lam = 1, 1e-2
-    k_sq = _k_grid(GRID.n, GRID.n, "cpu", GRID.length).numpy()
-    k_half = np.sqrt(k_sq)                       # every rfft2 half-plane mode
-    w_torch = (1.0 + k_sq) ** order
-    w_torch = w_torch / w_torch.mean()           # losses.sobolev_loss normalises
-    ratio = GRID.n / (GRID.n // 2 + 1)           # N_cells / N_half
+def test_additive_weight_matches_sobolev_loss_on_single_modes():
+    """Single real cosine modes through the real torch loss, not a rebuilt ratio.
 
-    # compare mode by mode, at the |k| values the half-plane actually contains
-    ours = additive_sobolev_weight(k_half, GRID, lam, order).ravel()
-    expected = 1.0 + lam * ratio * w_torch.ravel()
-    assert np.allclose(ours, expected, rtol=1e-5)
-    assert abs(ours.min() - 1.0) < 1e-3, "weight must be ~1 at low k, not ~0"
+    Modes on kx = 0 carry the full N_cells / N_half factor; modes with kx != 0 and
+    kx = n/2 pairs behave as the shell formula says.  float32 `_k_grid` limits the
+    agreement to ~1e-5.
+    """
+    from src.acoustics.radiating import shell_axis_fraction
+    from src.models.losses import sobolev_loss
+
+    n, lam = GRID.n, 0.37
+    dk = 2.0 * np.pi / GRID.length
+    x = np.arange(n) * GRID.length / n
+    xx, yy = np.meshgrid(x, x, indexing="xy")          # axis 1 = x, axis 0 = y
+    for kx, ky in [(3, 5), (0, 4), (7, 0), (0, 32), (32, 0), (32, 5)]:
+        diff = torch.tensor(np.cos(dk * (kx * xx + ky * yy)), dtype=torch.float32)
+        zero = torch.zeros_like(diff)
+        base = float(torch.mean(diff ** 2))
+        measured = (float(sobolev_loss(diff, zero, 1, lam, GRID.length)) - base) / base
+        k = dk * np.hypot(kx, ky)
+        frac = shell_axis_fraction(np.array([k]), GRID)[0]
+        on_axis = kx in (0, n // 2)
+        # a single mode is on its own column, not shell-averaged
+        expected = additive_sobolev_weight(k, GRID, lam, 1, 1.0 if on_axis else 0.0) - 1.0
+        print(f"({kx},{ky}) measured {measured:.4e} analysis {expected:.4e} shell_frac {frac:.3f}")
+        assert abs(measured / expected - 1.0) < 1e-5, (kx, ky, measured, expected)
+
+
+def test_shell_axis_fraction_counts_full_grid():
+    from src.acoustics.radiating import shell_axis_fraction
+
+    dk = 2.0 * np.pi / GRID.length
+    n = GRID.n
+    assert shell_axis_fraction(np.array([0.0]), GRID)[0] == 1.0
+    # m^2 = 1: (+-1, 0), (0, +-1); the two kx = 0 modes are on the axis
+    assert shell_axis_fraction(np.array([dk]), GRID)[0] == 0.5
+    # grouping-independent: same m^2 from slightly different float k
+    a = shell_axis_fraction(np.array([dk * 5.0, dk * 5.0 * (1 + 1e-9)]), GRID)
+    assert a[0] == a[1]
+    # the whole grid: sum over shells of axis modes = 2 columns of n
+    ms = np.arange(0, 2 * (n // 2) ** 2 + 1)
+    idx = np.fft.fftfreq(n, d=1.0 / n).astype(int)
+    m2 = idx[:, None] ** 2 + idx[None, :] ** 2
+    cnt = np.bincount(m2.ravel(), minlength=ms.size)
+    frac = shell_axis_fraction(dk * np.sqrt(ms.astype(float)), GRID)
+    assert round(float((frac * cnt).sum())) == 2 * n
 
 
 # ------------------------------------------------------------------- the two limits
@@ -121,8 +151,13 @@ def test_additive_tends_to_multiplicative_as_lambda_grows():
     huge = effective_weight_in_cone(
         s, C0, "sobolev", lam=1e12, grid=GRID, convention="additive"
     )
-    h1 = effective_weight_in_cone(s, C0, "h1", convention="multiplicative")
-    assert abs(huge / h1 - 1.0) < 1e-3
+    from src.acoustics.radiating import shell_axis_fraction
+
+    # the Sobolev term alone is (1 + k^2) times the per-shell axis factor
+    k = s.k_resolved
+    w = (1.0 + k**2) * (1.0 + shell_axis_fraction(k, GRID))
+    pure = weighted_cone_share(s.power_resolved, w[None, :], s.radiating_mask_resolved(C0))
+    assert abs(huge / pure - 1.0) < 1e-3
 
 
 # ------------------------------------------------------------------ the paper claim

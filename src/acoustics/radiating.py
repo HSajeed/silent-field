@@ -11,20 +11,27 @@ things called "the Sobolev weighting", and they are not the same objective:
     A pure reweighting of the same energy.  This is the natural way to *analyse* an
     objective, and it is what this module computed before 2026-09-30.
 
-`convention="additive"`  --  w_eff = 1 + lambda * (N_cells / N_half) * (1 + k^2)^order
+`convention="additive"`  --  w_eff = 1 + lambda * c * (1 + k^2)^order / <.>,  c = N_cells / N_half
+    on the kx = 0 / Nyquist columns, N_cells / (2 N_half) elsewhere
+
     What `src/models/losses.py::sobolev_loss` actually minimises.  It is the sum of
     two separately normalised terms, `mean(diff**2)` over all cells plus
     `lambda * mean(w * |rfft2(diff)|**2)` over the rfft2 half-plane, so the per-mode
     weight is one *plus* a multiple of the Sobolev weight, with the multiple fixed by
-    the ratio of the two cell counts.  N_cells / N_half = n / (n//2 + 1).
+    the ratio of the two cell counts (N_cells / N_half = n / (n//2 + 1)) and by whether
+    the rfft2 coefficient stands for one full-plane mode or a conjugate pair.
 
-The distinction is not pedantry.  The multiplicative reading is 16x below the L2 cone
-share; the additive reading, at the weight the code actually trains with, is
-1.00x below it -- Sobolev training at its default strength changes the share of the
-objective reaching the radiating cone by 0.02%.  See `scripts/06_sobolev_argument.py`
-for the sweep, which is the honest form of the claim: the cone is starved by the
-*geometry* of the weighting, not by its exponent.  94% of (1 + k^2)^order's mass sits
-at high k, where the cone has no area at all.
+The distinction is not pedantry.  The pure multiplicative reading is 0.053 of the L2
+cone share (~19x below); the additive reading is >= 1 everywhere (w_eff >= 1) and ~1 in
+the cone, so Sobolev weighting can never raise the cone share.  At the default
+lam = 1e-2 the Sobolev term is a negligible part of the whole objective (~0.01%: the
+cone share moves by 1.3e-4 on data/turb2d.npz at M = 0.1) -- it is idle everywhere,
+not specifically in the cone.  Where lambda is large enough to
+matter it lowers the share, to 0.075 of L2 (~13x) at lam = 1e6 (the pure-H1 value, 19x,
+is the unreachable limit of the shell-weighted form).  See
+`scripts/06_sobolev_argument.py` for the sweep: the cone is starved by the *geometry*
+of the weighting, not by its exponent.  94% of (1 + k^2)^order's mass sits at high k,
+where the cone has no area at all.
 
 One honest caveat, stated rather than hidden.  The absolute prefactor relating the two
 terms depends on how the (k, omega) plane is normalised -- the analysis folds the
@@ -98,19 +105,42 @@ def sobolev_halfplane_mean_weight(grid: Grid, order: int = 1) -> float:
     return float(((1.0 + k_sq) ** order).mean())
 
 
+def shell_axis_fraction(k: np.ndarray, grid: Grid) -> np.ndarray:
+    """Fraction of full-grid modes at each |k| lying on the rfft2 kx = 0 / Nyquist columns.
+
+    Keyed on the integer shell m^2 = rint((k / dk)^2), dk = 2 pi / L, counted over the
+    whole n x n FFT grid.  Independent of how the caller groups |k| values.
+    """
+    n = grid.n
+    dk = 2.0 * np.pi / grid.length
+    idx = np.fft.fftfreq(n, d=1.0 / n).astype(int)
+    m2 = idx[:, None] ** 2 + idx[None, :] ** 2
+    on_axis = np.broadcast_to(np.isin(idx, (0, -n // 2))[None, :], m2.shape)
+    total = np.bincount(m2.ravel())
+    axis = np.bincount(m2.ravel(), weights=on_axis.ravel())
+    frac = np.divide(axis, total, out=np.zeros(total.size), where=total > 0)
+    shell = np.rint((np.asarray(k, dtype=float) / dk) ** 2).astype(int)
+    return frac[np.clip(shell, 0, total.size - 1)]
+
+
 def additive_sobolev_weight(
-    k: np.ndarray, grid: Grid, lam: float, order: int = 1
+    k: np.ndarray, grid: Grid, lam: float, order: int = 1, axis_fraction=0.0
 ) -> np.ndarray:
-    """Per-mode weight of the objective `losses.sobolev_loss` actually minimises.
+    """Per-full-plane-mode weight of the objective `losses.sobolev_loss` minimises.
 
-    `1 + lam * (N_cells / N_half) * (1 + k^2)^order / <weight>`, with the two factors
-    after lam coming straight out of that function:
+    `1 + lam * c * (1 + k^2)^order / <weight>` with the two normalisations taken from
+    that function:
 
-      * `losses.sobolev_loss` divides the Sobolev weight by its own mean over the
-        rfft2 half-plane, so the high-k up-weighting is scale-free;
-      * it then adds that term to `mean(diff**2)`, which is a mean over *all* cells.
-        The two terms therefore carry different per-mode mass, and the ratio is
-        N_cells / N_half = n / (n//2 + 1).
+      * the Sobolev weight is divided by its mean over the rfft2 half-plane;
+      * the term is added to `mean(diff**2)`, a mean over all N_cells = n^2 cells,
+        while the Sobolev term is a mean over N_half = n (n//2 + 1) coefficients.
+
+    A half-plane coefficient on the kx = 0 or kx = n/2 columns is one full-plane mode
+    and gets c = N_cells / N_half; every other one stands for the pair (+k, -k), so
+    per mode c = N_cells / (2 N_half).  On a radial shell,
+    c = N_cells / (2 N_half) * (1 + axis_fraction), with `axis_fraction` from
+    `shell_axis_fraction`; shell-averaging is exact for the share when energy is
+    isotropic within a shell.
 
     The leading 1 is the point.  A pure Sobolev weight is 1e-3 of its own mean
     everywhere inside the radiating cone, so at any usable lambda the sum is the 1.
@@ -119,7 +149,7 @@ def additive_sobolev_weight(
     ratio = grid.n / (grid.n // 2 + 1)
     w = (1.0 + k**2) ** order
     w = w / sobolev_halfplane_mean_weight(grid, order)
-    return 1.0 + lam * ratio * w
+    return 1.0 + lam * 0.5 * ratio * (1.0 + axis_fraction) * w
 
 
 def effective_weight_in_cone(
@@ -156,7 +186,10 @@ def effective_weight_in_cone(
             raise ValueError("the additive convention needs the Grid used to build the spectrum")
         # kind still selects the base objective: 'l2' has no Sobolev term at all, so
         # in the additive convention its weight is flat and the result is the L2 share.
-        base = np.ones_like(k) if kind == "l2" else additive_sobolev_weight(k, grid, lam, order)
+        base = (
+            np.ones_like(k) if kind == "l2"
+            else additive_sobolev_weight(k, grid, lam, order, shell_axis_fraction(k, grid))
+        )
         w = base[None, :]
     else:
         raise ValueError(f"unknown convention {convention!r}")
@@ -179,6 +212,7 @@ def sobolev_lambda_sweep(
     docstring on prefactors.
     """
     k = spectrum.k_resolved
+    axis_frac = shell_axis_fraction(k, grid)
     mask = spectrum.radiating_mask_resolved(c0)
     l2 = effective_weight_in_cone(spectrum, c0, "l2", convention="additive", grid=grid)
     h1 = effective_weight_in_cone(
@@ -186,7 +220,7 @@ def sobolev_lambda_sweep(
     )
     rows = []
     for lam in lambdas:
-        w = additive_sobolev_weight(k, grid, lam, order)[None, :]
+        w = additive_sobolev_weight(k, grid, lam, order, axis_frac)[None, :]
         share = weighted_cone_share(spectrum.power_resolved, w, mask)
         rows.append({
             "lambda": float(lam),

@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.spectral import Grid
 from src.solvers.io import load_dataset
-from src.acoustics.komega import welch_komega_spectrum, komega_spectrum, sound_speed
+from src.acoustics.komega import welch_komega_spectrum, komega_spectrum, velocity_komega_spectrum, sound_speed
 from src.acoustics.radiating import (
     effective_weight_in_cone,
     sobolev_lambda_sweep,
@@ -44,19 +44,26 @@ def _spectrum(field, grid, dt, n_segments):
             if n_segments > 1 else komega_spectrum(field, grid, dt))
 
 
-def _full_and_half_spectra(field, grid, dt, segments):
+def _cone_share_kmin(spec, c0, k_min):
+    """Absolute cone share restricted to resolved |k| >= k_min (denominator = total)."""
+    mask = spec.radiating_mask_resolved(c0) & (spec.k_resolved[None, :] >= k_min)
+    return float((spec.power_resolved * mask).sum() / spec.power_resolved.sum())
+
+
+def _full_and_half_spectra(fields, grid, dt, segments, spectrum):
     """Full-record spectrum plus first- and second-half estimates.
 
-    Halves get half as many Welch segments (rounded down, minimum 1), since
-    they cover half the record length.
+    `fields` is a tuple of (nt, n, n) arrays passed to `spectrum(*fields, grid, dt,
+    n_segments)`.  Halves get half as many Welch segments (rounded down, minimum 1),
+    since they cover half the record length.
     """
-    nt = field.shape[0]
+    nt = fields[0].shape[0]
     half = nt // 2
     half_segments = max(1, segments // 2)
     return {
-        "full": _spectrum(field, grid, dt, segments),
-        "half1": _spectrum(field[:half], grid, dt, half_segments),
-        "half2": _spectrum(field[half:], grid, dt, half_segments),
+        "full": spectrum(*fields, grid, dt, segments),
+        "half1": spectrum(*(f[:half] for f in fields), grid, dt, half_segments),
+        "half2": spectrum(*(f[half:] for f in fields), grid, dt, half_segments),
     }
 
 
@@ -94,15 +101,18 @@ def main():
     print(f"record {u.shape}, dt={dt:.5f}, u_rms={u_rms:.4f}")
 
     # --- velocity-field (k, omega) spectra: full record + both halves
-    field = np.stack([u, v], axis=-1)
-    vel_specs = _full_and_half_spectra(field, grid, dt, args.segments)
+    record_shape = [*u.shape, 2]
+    vel_specs = _full_and_half_spectra((u, v), grid, dt, args.segments,
+                                       velocity_komega_spectrum)
     spec = vel_specs["full"]
     print(f"spectrum: {spec.power.shape} (omega x k)")
     print(f"  omega up to {spec.omega.max():.3f}, k up to {spec.k_bins.max():.3f}")
 
     # --- Lighthill source (divergence form), computed frame by frame, same treatment
     src = source_timeseries(u, v, grid, form="divergence")
-    src_specs = _full_and_half_spectra(src, grid, dt, args.segments)
+    del u, v
+    src_specs = _full_and_half_spectra((src,), grid, dt, args.segments, _spectrum)
+    del src
 
     print("\n--- THE NUMBER: share of the objective inside the radiating cone ---")
     default_lam = args.sobolev_lam
@@ -114,6 +124,8 @@ def main():
         l2_half1 = effective_weight_in_cone(vel_specs["half1"], c0, "l2")
         l2_half2 = effective_weight_in_cone(vel_specs["half2"], c0, "l2")
         l2_lo, l2_hi, l2_spread = _band([l2_full, l2_half1, l2_half2])
+        k2 = [_cone_share_kmin(vel_specs[p], c0, 2.0) for p in ("full", "half1", "half2")]
+        k2_lo, k2_hi, k2_spread = _band(k2)
 
         # Pure multiplicative H1: a reweighting of the same energy, and NOT the
         # objective `losses.sobolev_loss` trains.  Kept because it is the natural
@@ -136,6 +148,9 @@ def main():
             "l2": l2_full,
             "l2_half1": l2_half1, "l2_half2": l2_half2,
             "l2_band": [l2_lo, l2_hi], "l2_spread": l2_spread,
+            "l2_k2": k2[0],
+            "l2_k2_half1": k2[1], "l2_k2_half2": k2[2],
+            "l2_k2_band": [k2_lo, k2_hi], "l2_k2_spread": k2_spread,
             "h1_mult": h1_mult,
             "h1_add": h1_add,
             "h1_add_lambda": default_lam,
@@ -149,15 +164,20 @@ def main():
         })
 
     header = (f"{'Mach':>6} {'c0':>8} {'R_u':>9} {'R_u band':>19} {'F_u':>6} "
+              f"{'R_k2':>9} {'R_k2 band':>19} {'F_k2':>6} "
               f"{'R_S':>9} {'R_S band':>19} {'F_S':>6} {'H1add':>9} {'H1mult':>9}")
     print(header)
     for r in rows:
         lo_u, hi_u = r["l2_band"]
         lo_s, hi_s = r["src_l2_band"]
+        lo_k, hi_k = r["l2_k2_band"]
+        band_k = f"[{_fmt_sci(lo_k)}, {_fmt_sci(hi_k)}]"
         band_u = f"[{_fmt_sci(lo_u)}, {_fmt_sci(hi_u)}]"
         band_s = f"[{_fmt_sci(lo_s)}, {_fmt_sci(hi_s)}]"
         print(f"{r['mach']:>6.2g} {_fmt_c0(r['c0']):>8} {_fmt_sci(r['l2']):>9} "
-              f"{band_u:>19} {r['l2_spread']:>6.1f} {_fmt_sci(r['src_l2']):>9} "
+              f"{band_u:>19} {r['l2_spread']:>6.1f} "
+              f"{_fmt_sci(r['l2_k2']):>9} {band_k:>19} {r['l2_k2_spread']:>6.1f} "
+              f"{_fmt_sci(r['src_l2']):>9} "
               f"{band_s:>19} {r['src_l2_spread']:>6.1f} "
               f"{_fmt_sci(r['h1_add']):>9} {_fmt_sci(r['h1_mult']):>9}")
     print("\nBand = envelope of {full record, first half, second half} estimates "
@@ -170,7 +190,7 @@ def main():
     print("pre-2026-09-30 numbers reported. The gap between the two columns is the")
     print("whole correction: they are different objectives, and only H1add is trained.")
     print("\nlambda sweep of H1add at the plotted Mach number "
-          f"(full lambda range in figures/komega_metrics.json):")
+          f"(full lambda range in the metrics JSON):")
     for r in rows:
         if r["mach"] != args.plot_mach:
             continue
@@ -183,6 +203,10 @@ def main():
                   f"   ({entry['ratio_to_l2']:.3g}x L2)")
 
     out = Path(args.outdir); out.mkdir(parents=True, exist_ok=True)
+    stem = Path(args.data).stem
+    suffix = "" if Path(args.data) == Path("data/turb2d.npz") else f"_{stem}"
+    metrics_name = f"komega_metrics{suffix}.json"
+    fig_name = f"04_komega{suffix}.png"
 
     manifest_path = Path(args.data).with_name(Path(args.data).stem + ".manifest.json")
     manifest_hash = None
@@ -198,11 +222,11 @@ def main():
         "data": str(args.data),
         "dataset_manifest": str(manifest_path) if manifest_path.exists() else None,
         "dataset_manifest_hash": manifest_hash,
-        "record_shape": list(field.shape),
+        "record_shape": record_shape,
         "dt": dt,
         "argv": sys.argv,
     }
-    (out / "komega_metrics.json").write_text(json.dumps(
+    (out / metrics_name).write_text(json.dumps(
         {"u_rms": u_rms, "rows": rows, "settings": settings}, indent=2))
 
     try:
@@ -224,8 +248,8 @@ def main():
         R = spec.radiating_fraction(c0)
         ax.set_title(f"Energy in the radiating cone (M={m}): {R:.2e} of the total")
         ax.legend(loc="upper left"); fig.colorbar(pc, ax=ax, label="E(|k|,$\\omega$)")
-        fig.tight_layout(); fig.savefig(out/"04_komega.png", dpi=150)
-        print(f"\nwrote {out/'04_komega.png'}")
+        fig.tight_layout(); fig.savefig(out/fig_name, dpi=150)
+        print(f"\nwrote {out/fig_name}")
     except Exception as e:
         print(f"(plot skipped: {e})")
 

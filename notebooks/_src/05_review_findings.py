@@ -139,26 +139,29 @@ plt.xlabel(r"$\omega$"); plt.ylabel("rms |p| on the observer ring"); plt.legend(
 #
 # ### 2.1 At the default λ the Sobolev term is negligible everywhere [computed]
 #
-# The trained objective's per-mode weight is $w=1+\lambda\,r\,\tilde w(k)$, where
-# $\tilde w$ is (1+k²) normalised to mean 1 and r ≈ 2. The share of the whole objective
-# coming from the Sobolev term is $\sum P(w-1)/\sum Pw$.
+# The trained objective's per-mode weight is $w=1+\lambda\,c\,\tilde w(k)$, where
+# $\tilde w$ is (1+k²) normalised to mean 1 and c ≈ 1 per full-plane mode (the current code,
+# after the factor-2 fix of 2026-10-07, §2.2; at the review it was ≈ 2). The share of the
+# whole objective coming from the Sobolev term is $\sum P(w-1)/\sum Pw$.
 
 # %%
-from src.acoustics.radiating import additive_sobolev_weight
+from src.acoustics.radiating import additive_sobolev_weight, shell_axis_fraction, sobolev_halfplane_mean_weight
 spec = spectra.spectra_for(ENV, "turb2d", source=False)["vel_full"]
 P = spec.power_resolved.sum(axis=0)                     # energy per resolved |k|
-ksq = np.sort(grid.k_sq.ravel()); _, first = np.unique(ksq, return_index=True)
-modes_per_k = np.diff(np.append(first, ksq.size)).astype(float)
+shell = np.rint(grid.k_sq.ravel() / (2 * np.pi / L) ** 2).astype(int)
+modes_per_k = np.bincount(shell)[np.unique(shell)].astype(float)
+axis_frac = shell_axis_fraction(spec.k_resolved, grid)
 for lam in (1e-2, 1.0, 1e2):
-    w = additive_sobolev_weight(spec.k_resolved, grid, lam)
+    w = additive_sobolev_weight(spec.k_resolved, grid, lam, axis_fraction=axis_frac)
     frac_data = (P * (w - 1)).sum() / (P * w).sum()
     frac_white = (modes_per_k * (w - 1)).sum() / (modes_per_k * w).sum()
     print(f"lambda = {lam:g}: Sobolev term is {frac_data:.2%} of the objective for error shaped like the data, "
           f"{frac_white:.1%} for white error")
 
 # %% [markdown]
-# So at λ = 1e-2 the trained "Sobolev" objective *is* L2 to within 0.03%, everywhere, not
-# just in the cone. "Inert at λ = 1e-2" mostly reflects how small λ is. A referee will read
+# So at λ = 1e-2 the trained "Sobolev" objective *is* L2 to within the percentage printed
+# above (0.03% at the review, before the factor-2 fix of §2.2; 0.01% now),
+# everywhere, not just in the cone. "Inert at λ = 1e-2" mostly reflects how small λ is. A referee will read
 # it as "Sobolev training was switched off".
 #
 # **The robust statement:**
@@ -170,12 +173,15 @@ for lam in (1e-2, 1.0, 1e2):
 # That holds for any error spectrum and any λ.
 
 # %% [markdown]
-# ### 2.2 The analysis weight is 2× too large for most modes [computed]
+# ### 2.2 The analysis weight was 2× too large for most modes [computed; fixed 2026-10-07]
 #
-# `additive_sobolev_weight` uses r = n/(n/2+1) (`src/acoustics/radiating.py:119`). Each
-# interior rfft2 coefficient stands for two full-plane modes (+k and −k), so per mode the
-# correct factor is n/(n+2), half as large, for every mode with kx ≠ 0. Measured against
-# the real torch loss on single Fourier modes:
+# At the review, `additive_sobolev_weight` used r = n/(n//2+1) per mode
+# (`src/acoustics/radiating.py:119`). Each interior rfft2 coefficient stands for two
+# full-plane modes (+k and −k), so per mode the correct factor is n/(n+2), half as large,
+# for every mode with kx ≠ 0; only modes on the kx = 0 (and Nyquist) columns get n/(n//2+1).
+# Measured against the real torch loss on single Fourier modes, with the formula as it was
+# at the review written out inline and the current function (axis fraction 1 for a kx = 0
+# mode, 0 otherwise):
 
 # %%
 from src.models.losses import sobolev_loss
@@ -183,20 +189,24 @@ from src.spectral import Grid
 g64, lam = Grid(n=64, length=2 * np.pi), 0.37
 x = np.arange(64) * g64.length / 64
 X, Y = np.meshgrid(x, x, indexing="xy")
+wbar = sobolev_halfplane_mean_weight(g64)
 rows = []
 for mx, my in [(3, 5), (0, 4), (7, 0)]:
     d = np.cos(mx * X + my * Y); dt_ = torch.tensor(d)[None, None]
     measured = sobolev_loss(dt_, torch.zeros_like(dt_), 1, lam, g64.length).item() / np.mean(d**2) - 1
-    analysis = additive_sobolev_weight(np.array([np.hypot(mx, my)]), g64, lam)[0] - 1
-    rows.append(((mx, my), measured, analysis, analysis / measured))
-md("| mode (kx, ky) | w − 1, torch loss | w − 1, analysis | analysis / loss |\n|---|---|---|---|\n" +
-   "".join(f"| {m} | {a:.4e} | {b:.4e} | **{c:.3f}** |\n" for m, a, b, c in rows))
-assert np.allclose([r[3] for r in rows], [2, 1, 2], atol=1e-6)
+    k_mode = np.hypot(mx, my)
+    at_review = lam * (g64.n / (g64.n // 2 + 1)) * (1 + k_mode**2) / wbar
+    current = additive_sobolev_weight(np.array([k_mode]), g64, lam, axis_fraction=float(mx == 0))[0] - 1
+    rows.append(((mx, my), measured, at_review, current, at_review / measured, current / measured))
+md("| mode (kx, ky) | w − 1, torch loss | w − 1, formula at review | w − 1, current code | review / loss | current / loss |\n|---|---|---|---|---|---|\n" +
+   "".join(f"| {m} | {a:.4e} | {b:.4e} | {c:.4e} | **{d:.3f}** | **{e:.3f}** |\n" for m, a, b, c, d, e in rows))
+assert np.allclose([r[4] for r in rows], [2, 1, 2], atol=1e-6)
+assert np.allclose([r[5] for r in rows], [1, 1, 1], atol=1e-6)
 
 # %% [markdown]
-# - **Why the tests miss it:** `tests/test_radiating.py:100` rebuilds the same ratio rather
-#   than evaluating the loss, so it is circular.
-# - **Direction of the error:** it overstates the Sobolev effect, so no conclusion flips;
+# - **Why the tests missed it** (at the review): `tests/test_radiating.py:100` rebuilt the same ratio rather
+#   than evaluating the loss, so it was circular.
+# - **Direction of the error:** it overstated the Sobolev effect, so no conclusion flips;
 #   the λ axis of the sweep shifts by 2×.
 # - **A side effect in the loss itself:** modes on the kx = 0 column get twice the Sobolev
 #   weight of other modes at the same |k|, because the half-plane mean in `losses.py` has no
@@ -329,7 +339,8 @@ print(f"one-step pairs: input {tuple(x.shape)} -> target {tuple(y.shape)}  (batc
 ks = grid.k_sq.ravel()
 print(f"distinct float k^2: {np.unique(ks).size};  distinct integer k^2: {np.unique(np.rint(ks)).size};  "
       f"max deviation from an integer: {np.abs(ks - np.rint(ks)).max():.1e}")
-print("harmless for the mask (split groups have the same |k| to 1e-12), but the docstring is wrong")
+print("harmless for the mask (split groups have the same |k| to 1e-12), but the docstring was wrong")
+print("since 2026-10-07 `komega.py` groups on rint(k^2/dk^2): 1621 resolved shells at n = 128 (1850 before); metric values unchanged to 6e-16")
 
 # %% [markdown]
 # ## What this chapter established

@@ -179,10 +179,12 @@ plt.show()
 # share equals the L2 share.
 #
 # **What the 2026-10-01 review adds (chapter 05):**
-# - at λ = 1e-2 the Sobolev term is only ~0.03% of the whole objective, so "inert" mostly
+# - at λ = 1e-2 the Sobolev term is only a tiny fraction of the whole objective (~0.03% at
+#   the review, before the 2026-10-07 factor-2 fix; now ~0.01%, chapter 05 §2.1), so "inert" mostly
 #   reflects a negligible λ;
 # - wherever the term matters, the cone share drops (the curve above);
-# - the analysis weight is 2× too large for most modes.
+# - the analysis weight was 2× too large for most modes (fixed 2026-10-07; the λ sweep above
+#   is the corrected one, so its values differ from the old log).
 #
 # The Tier-0 fix to the *convention* is right. The *conclusion* drawn from it is revised in
 # chapter 05.

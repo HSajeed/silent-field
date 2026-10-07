@@ -8,7 +8,11 @@ weight, and this script measures it directly.
 The argument, in one line: a Sobolev objective is a sum of two separately normalised
 terms, so the per-mode weight it applies is
 
-    w_eff(k) = 1 + lambda * (N_cells / N_half) * (1 + k^2)^order / <(1 + k^2)^order>
+    w_eff(k) = 1 + lambda * c * (1 + k^2)^order / <(1 + k^2)^order>
+
+with c = N_cells / N_half on the rfft2 kx = 0 / Nyquist columns and N_cells / (2 N_half)
+for every other mode (a half-plane coefficient there stands for a conjugate pair),
+shell-averaged for the radial analysis,
 
 and (1 + k^2)^order is three orders of magnitude below its own mean everywhere inside
 the radiating cone, because the cone is at low k and 94% of that weight's mass is at

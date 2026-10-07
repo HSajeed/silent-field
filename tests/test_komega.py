@@ -8,7 +8,8 @@ import sys; from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from src.spectral import Grid
-from src.acoustics.komega import komega_spectrum, sound_speed, KOmegaSpectrum
+from src.acoustics.komega import (komega_spectrum, welch_komega_spectrum, velocity_komega_spectrum,
+                                  sound_speed, KOmegaSpectrum)
 
 G = Grid(n=32)
 
@@ -95,3 +96,22 @@ def test_resolved_fraction_matches_mask_on_the_mode_grid():
     # the resolved grid keeps the corner modes that the binned grid drops
     assert s.k_resolved.size > s.k_bins.size
     assert s.k_resolved.max() > s.k_bins.max()
+
+def test_velocity_spectrum_equals_stacked():
+    g = Grid(n=16)
+    rng = np.random.default_rng(0)
+    u = rng.standard_normal((64, 16, 16)); v = rng.standard_normal((64, 16, 16))
+    stacked = np.stack([u, v], axis=-1)
+    for seg, ref in [(1, komega_spectrum(stacked, g, 0.1)),
+                     (3, welch_komega_spectrum(stacked, g, 0.1, n_segments=3))]:
+        s = velocity_komega_spectrum(u, v, g, 0.1, seg)
+        assert np.allclose(s.power, ref.power, rtol=1e-12, atol=0)
+        assert np.allclose(s.power_resolved, ref.power_resolved, rtol=1e-12, atol=0)
+        assert np.array_equal(s.k_resolved, ref.k_resolved)
+
+def test_resolved_shells_are_integer_mode_sums():
+    g = Grid(n=128)
+    m = np.fft.fftfreq(128, d=1.0 / 128)
+    expected = np.unique((m[:, None] ** 2 + m[None, :] ** 2).astype(np.int64)).size
+    s = komega_spectrum(np.random.default_rng(1).standard_normal((8, 128, 128)), g, 1.0)
+    assert s.k_resolved.size == expected

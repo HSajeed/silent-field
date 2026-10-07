@@ -51,3 +51,13 @@ From the repo root, with the project's Python environment:
 The `.ipynb` files are generated from the percent-format sources in `_src/`. Edit the
 sources, not the notebooks. Local caches go to `.nb_cache/` (git-ignored). On a machine
 with a CUDA GPU, chapter 06 trains by default; set `RUN_TRAINING = False` to skip.
+
+## Change note, 2026-10-07
+
+The code changed (factor-2 fix in `additive_sobolev_weight` plus `shell_axis_fraction`;
+`komega.py` shells grouped on `rint(k²/dk²)`, 1621 at n = 128 instead of 1850; T-form far
+field in `scripts/03`; new `tform.py`). Chapter 05 §2.1–2.2 now show the pre-fix formula
+inline (reproduces the review's 2×) next to the current function (1×), and chapters 04, 05
+and 07 prose was made version-honest. Cached spectra from the old shell grouping were
+deleted from `.nb_cache/`. Re-run headless after the change: chapters 01, 03, 04, 05, 07
+(all asserts pass). Chapters 00, 02 and 06 were not re-run.
