@@ -9,8 +9,8 @@ over-represented in the radiating cone.  "B >= 1" is not a theorem, and a large 
 come from step-to-step jitter rather than from the objective, so every number is shown
 beside controls:
 
-    fno_tf          the model, teacher-forced one-step (what scripts/03 evaluates)
-    fno_rollout     the model, free rollout from the first true snapshot
+    model_tf        the model, teacher-forced one-step (what scripts/03 evaluates)
+    model_rollout   the model, free rollout from the first true snapshot
     copy_input      predict t+1 = t (no model)
     white_matched   truth + solenoidal white noise, per-snapshot norm = the model's error
     shuffled_error  truth + the model's own error snapshots in random time order
@@ -63,9 +63,8 @@ def main():
     t0 = time.time()
 
     import torch
-    from src.models.fno import FNO2d
-    from src.models.unet import UNet2d
-    from src.models.train import TrainConfig, make_pairs, predict_onestep, predict_rollout, denormalise
+    from src.models.train import (TrainConfig, make_pairs, predict_onestep, predict_rollout,
+                                  denormalise, load_model)
 
     u, v, meta = load_dataset(args.data)
     if args.smoke:
@@ -76,10 +75,7 @@ def main():
     c0 = sound_speed(float(np.sqrt(np.mean(u[1:] ** 2 + v[1:] ** 2))), args.mach)
     rng = np.random.default_rng(args.seed)
 
-    ckpt = torch.load(args.model, map_location="cpu", weights_only=False)
-    model = FNO2d(modes=min(24, grid.n // 4), width=48) if ckpt["arch"] == "fno" \
-        else UNet2d(base=48, depth=3)
-    model.load_state_dict(ckpt["state_dict"])
+    model, ckpt = load_model(args.model, grid.n)
     stats, cfg = ckpt["stats"], TrainConfig()
     x, _, _ = make_pairs(u.astype(np.float32), v.astype(np.float32), normalise=False)
     x = (x - stats["mean"]) / stats["std"]          # the model's training statistics
@@ -94,8 +90,8 @@ def main():
     perm = rng.permutation(len(e_u))
     nu, nv = white_like(e_u, e_v, grid, rng)
     variants = {
-        "fno_tf": (tf[:, 0], tf[:, 1], len(tf)),
-        "fno_rollout": (ro[:, 0], ro[:, 1], len(ro)),
+        "model_tf": (tf[:, 0], tf[:, 1], len(tf)),
+        "model_rollout": (ro[:, 0], ro[:, 1], len(ro)),
         "copy_input": (u[:-1], v[:-1], len(u) - 1),
         "white_matched": (ut_all + nu, vt_all + nv, len(ut_all)),
         "shuffled_error": (ut_all + e_u[perm], vt_all + e_v[perm], len(ut_all)),

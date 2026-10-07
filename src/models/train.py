@@ -140,3 +140,13 @@ def predict_rollout(model, x0, n_steps, cfg: TrainConfig):
             break
         out.append(x[0].cpu().numpy())
     return np.stack(out) if out else np.empty((0,) + tuple(x0.shape), dtype=np.float32)
+
+
+def load_model(path, n):
+    """Rebuild a checkpoint written by scripts/02 (same constructors) -> (model, ckpt dict)."""
+    from .fno import FNO2d
+    from .unet import UNet2d
+    ck = torch.load(path, map_location="cpu", weights_only=False)
+    model = FNO2d(modes=min(24, n // 4), width=48) if ck["arch"] == "fno" else UNet2d(base=48, depth=3)
+    model.load_state_dict(ck["state_dict"])
+    return model, ck
