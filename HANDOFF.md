@@ -275,7 +275,34 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    aliasing band (|k| > 2/3 k_max), low-k ω-spectrum of error vs truth; model vs copy-input.
    `09` variants renamed `model_tf`/`model_rollout` (the fno_mse_01 JSON still says `fno_*`).
    Plan agreed 2026-10-07: run `10` on FNO + train/evaluate UNet; then FNO with standard H¹ and
-   with an unrolled multi-step loss; later noise injection / PDE-Refiner. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   with an unrolled multi-step loss; later noise injection / PDE-Refiner.
+   **Experiments 1–2 done (Colab T4, `63c2bba`).** UNet `runs/unet_mse_01/` (4.33M params,
+   60 ep in 12.1 min, val 9.2e-04, best 7.6e-04). FNO | UNet (copy-input):
+
+   | measure (M=0.1, teacher-forced unless noted) | FNO | UNet | copy |
+   |---|---|---|---|
+   | field / source error | 3.04% / 28.6% | 1.60% / 17.8% | 9.63% / 31.6% |
+   | far field complex: all / below / above c0·dk | 2.71 / 0.86 / 19.0% | 2.50 / 2.02 / 11.0% | 18.9 / 17.7 / 52.2% |
+   | far field complex at ω=34.9 / 59.9 | 263% / 678% | 132% / 388% | 128% / 186% |
+   | B / B_S | 4.71e3 / 9.24 | 3.93e3 / 6.97 | 21.5 / 3.16 |
+   | controls B: matched white / shuffled | 9.46e4 / 5.95e5 | 9.49e4 / 5.02e6 | |
+   | R_pred/R_truth: teacher-forced / rollout | 5.92 / 34.9 | 1.91 / 3.72 | 0.994 |
+   | radiated power ratio, rollout | 0.776 | 0.714 | |
+   | low-k error PSD flatness, high-ω/mid-ω (truth 2.4e-9) | 1.4e-3 | 2.1e-4 | 1.2e-7 |
+   | low-k error ÷ truth: high ω / mid ω | 191 / 3.2e-4 | 17.9 / 2.0e-4 | 2.2 / 4.5e-2 |
+   | cone error from |k|=1 shell | 39% | 58% | |
+   | aliasing band (|k|>42.7): error share / lag-1 corr (truth 0.64) | 17% / 0.29 | 26% / 0.48 | 2% / 0.11 |
+
+   Reading (interpretation): **both architectures show the same signature**, so it is the
+   objective, not the FNO. The cone error sits in the lowest shells with a near-white ω
+   spectrum that exceeds the true signal at high ω (191× FNO, 18× UNet) while being
+   ~1e-4 of it at mid ω — the jitter fingerprint. The aliasing-band error is itself
+   incoherent (not deterministic folding) and is not where the cone error lives, so
+   aliasing is not the explanation. B barely moves between models (4.7e3 → 3.9e3) although
+   the field error halves: B characterises the objective, not the model quality. Caveat:
+   the energy-weighted lag-1 correlation is dominated by low-ω error and is not decisive
+   on its own. Next: FNO with standard H¹ (expect no B change) and with an unrolled
+   multi-step loss (jitter account predicts B and the high-ω far-field excess drop). For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
