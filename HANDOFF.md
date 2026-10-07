@@ -17,8 +17,8 @@ Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under
 
 ## Resume here (end of session 2026-10-07)
 1. **Collect the pending Mach sweeps** (Mach is an analysis knob; no retraining). The user
-   launched `unet_mse_01` in the RunStage3 Colab notebook at session end; `fno_h1_01` and
-   `fno_mse_unroll4` remain. Read outputs with colab-mcp `get_cells(includeOutputs=true)`;
+   ran `unet_mse_01` (done, logged); `fno_h1_01` and `fno_mse_unroll4` remain (in RunStage3
+   change only the `RUN = ...` line). Read outputs with colab-mcp `get_cells(includeOutputs=true)`;
    results also land on Drive (`runs/<run>/09_blindness_machs.json`, `runs/<run>/machs/`).
    Then add them to `stage3_log.md` (Mach-sweep section) and summarise here (open item 7).
 2. **Decide experiment 5.** Candidates: noise-injection training; PDE-Refiner-style refinement;
@@ -243,8 +243,9 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    - **Standard H¹ makes it ~20× worse** (B 1.1e5, high-ω far field 3–4×). **Unrolling ×4
      does not fix it** (B −21%, just below seed spread; high-ω excess worse). Interpretation:
      any amplitude-weighted loss leaves the jitter invisible; a fix must reweight in ω.
-   - **Mach:** B falls ~M⁻⁶ (1.2e6 at M=0.05 → 29 at 0.3); radiating-band far-field error
-     218% → 3.9%. Blindness is a low-Mach effect; B_S stays 5–11. (FNO only so far.)
+   - **Mach:** B falls ~M⁻⁵–M⁻⁶ (FNO 1.2e6 → 29, UNet 5.3e5 → 38 from M=0.05 to 0.3);
+     radiating-band far-field error FNO 218% → 3.9%, UNet 120% → 2.6% — worse than copying at
+     M=0.05 for both. Blindness is a low-Mach effect in both architectures; B_S stays 5–11.
    - Rollout metrics are seed-dominated (radiated power 0.49–1.11 across seeds): never rank
      models on one rollout.
    For any trained Stage-4 run use the standard multiplicative H¹ loss (neuraloperator

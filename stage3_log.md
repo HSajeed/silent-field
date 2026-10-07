@@ -184,6 +184,18 @@ copying (3.9%) at M = 0.3. **Source-side B_S is nearly Mach-independent** (10.6 
 Expected, since the cone widens with M (|k| ≤ 3.5 / 6.9 / ~21) and takes in well-predicted,
 energetic modes. Incompressible Lighthill is valid only for M ≪ 1, so 0.3 is the ceiling.
 
-**Pending:** the same sweep for `unet_mse_01` (running at session end, launched by the user),
-`fno_h1_01`, `fno_mse_unroll4`. Runner: in RunStage3 change only `RUN = f"{ROOT}/runs/<run>"`;
+**`unet_mse_01`** (`6c987b8`, run by the user in RunStage3; `09_blindness_machs.json`, `machs/03_errors.json`):
+
+| M | B model | B white | B copy | B_S | R_pred/R_truth | far field above c0·dk: model / copy | P/P0 rollout |
+|---|---|---|---|---|---|---|---|
+| 0.05 | 5.33e5 | 4.18e7 | 66.9 | 7.62 | 128 | 120% / 107% | 0.69 |
+| 0.1 | 3.93e3 | 9.49e4 | 21.5 | 6.97 | 1.91 | 11.0% / 52.2% | 0.71 |
+| 0.2 | 191 | 2.59e3 | 7.94 | 6.22 | 1.04 | 3.2% / 33.4% | 0.75 |
+| 0.3 | 37.6 | 450 | 4.92 | 6.69 | 1.01 | 2.6% / 27.8% | 0.81 |
+
+Same trend as the FNO: B ∝ ~M⁻⁵ (5.3e5 → 38), and at M = 0.05 the radiating-band far field is
+worse than copying for **both** architectures; B_S flat at 6–8. Low-Mach blindness is not
+architecture-specific.
+
+**Pending:** the same sweep for `fno_h1_01` and `fno_mse_unroll4`. Runner: in RunStage3 change only `RUN = f"{ROOT}/runs/<run>"`;
 the cell runs `09 --machs 0.05 0.1 0.2 0.3` then `03 --extra-machs 0.05 0.2 0.3 --out {RUN}/machs`.
