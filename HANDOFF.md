@@ -334,7 +334,10 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
      amplitude-weighted, so the low-amplitude, high-ω jitter stays invisible to it. The lever
      is the weighting in ω, i.e. the README's open question (a cone/temporal-frequency-
      weighted objective over a time window), with noise injection and PDE-Refiner as the
-     literature baselines. For any trained Stage-4 run use the standard multiplicative H¹ loss
+     literature baselines.
+   **Seeding (2026-10-07):** runs up to `f261e06` built the model before seeding, so their
+   weight initialisation was unseeded (batch order was seeded, seed 0). `scripts/02 --seed N`
+   now seeds both; two `--seed 1` smoke runs are identical. Seed runs: `fno_mse_s1`, `fno_mse_s2`. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
