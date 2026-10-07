@@ -74,3 +74,15 @@ def test_radiated_power_matches_the_far_field_solver():
                    / grid.dx**4).sum()
     direct = radiated_power(u, v, grid, dt, [c0], n_theta=n_theta, n_segments=1)["power"][0]
     np.testing.assert_allclose(from_solver, direct, rtol=1e-3)
+
+
+def test_stress_difference_with_itself_is_zero_and_with_zero_is_unchanged():
+    u, v, grid = _field()
+    dt = 0.05
+    plain = cone_share_refined(u, v, grid, dt, [10.0], pad=2)
+    vs_zero = cone_share_refined(u, v, grid, dt, [10.0], pad=2,
+                                 minus=(np.zeros_like(u), np.zeros_like(v)))
+    np.testing.assert_allclose(vs_zero["share"], plain["share"], rtol=1e-12)
+    from src.acoustics.tform import radiated_power
+    p = radiated_power(u, v, grid, dt, [10.0], n_theta=8, n_segments=1, minus=(u, v))
+    assert p["power"][0] == 0.0 and p["compact"][0] == 0.0

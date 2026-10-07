@@ -151,7 +151,7 @@ Three bugs fixed, all found by re-deriving the numbers rather than reading the l
    the strongest radiating frequencies if the physical band sees <1% of the radiating
    power, and says so.
 
-Tests: **21 → 42** (59 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
+Tests: **21 → 42** (61 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
 
 ## Method pitfalls (learned the hard way)
 - Compare power **density** (P/dω) across estimators with different segment lengths. Per-bin power is 2.5× off.
@@ -186,9 +186,10 @@ python scripts/05_make_figures.py                                  # slope, [12,
 python scripts/06_sobolev_argument.py                              # Stage 4, no model needed
 python scripts/07_tform_metric.py                                  # R_T (T-form cone share, sub-dk included)
 python scripts/08_mach_scaling.py                                  # radiated power vs M, compact 2D law (~1.5 min; 4π ~6 min)
-python -m pytest -q                                                # 59 passed
+python -m pytest -q                                                # 61 passed
 python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # Stage 3 (GPU); --smoke for a quick check
 python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01
+python scripts/09_blindness.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01      # B, B_S + controls
 python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --out <path>
 ```
 
@@ -236,9 +237,18 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    but the FNO's gain over copying there (3.4×) equals its gain on the field (3.2×): harder,
    not selectively neglected — no B-type evidence yet. (4) **Training improves the source
    only 1.1× over copying** while improving the field 3.2×: the clearest support so far,
-   at source level. Next: make `03` report complex error + the copy baseline by default;
-   per-frequency error; free-rollout control; B/B_S + matched random error (review §4.2);
-   UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   at source level.
+   **Built 2026-10-07 (smoke-tested, not yet run on `fno_mse_01`):** `03` now reports the
+   complex error as primary, the copy-input baseline beside every number (`--no-baseline`
+   to skip) and per-frequency far-field error with below/above-c0·dk aggregates.
+   `scripts/09_blindness.py` computes B = R(error)/R(truth) and B_S = R_T(error)/R_T(truth)
+   (`tform.cone_share_refined(..., minus=)`), plus phase-free ratios R, R_T, P_rad of
+   prediction/truth, for five variants: FNO teacher-forced, FNO free rollout
+   (`train.predict_rollout`), copy-input, matched solenoidal white noise, and the model's own
+   error time-shuffled (the jitter test of review §4.2). Smoke (untrained model) already
+   shows matched white B ~6e3 and shuffled B ~5e5: any temporally incoherent error lands in
+   the cone, so B must be read against these controls. Next: run new `03` and `09` on
+   `fno_mse_01` (Colab), then UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 

@@ -119,3 +119,24 @@ def predict_onestep(model, x, cfg: TrainConfig, batch=8):
     for i in range(0, len(x), batch):
         out.append(model(x[i:i + batch].to(cfg.device)).cpu().numpy())
     return np.concatenate(out, axis=0)
+
+
+@torch.no_grad()
+def predict_rollout(model, x0, n_steps, cfg: TrainConfig):
+    """Free autoregressive rollout: start from one true (normalised) snapshot x0 of shape
+    (2, n, n) and feed every prediction back in.  Returns (n_valid, 2, n, n), stopping
+    early at the first non-finite step.
+
+    The control for `predict_onestep`: teacher forcing re-anchors each step to the truth,
+    so step-to-step jitter is all its error can contain; a rollout has to carry the
+    large scales itself.
+    """
+    model.eval().to(cfg.device)
+    x = x0[None].to(cfg.device)
+    out = []
+    for _ in range(n_steps):
+        x = model(x)
+        if not torch.isfinite(x).all():
+            break
+        out.append(x[0].cpu().numpy())
+    return np.stack(out) if out else np.empty((0,) + tuple(x0.shape), dtype=np.float32)
