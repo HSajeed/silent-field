@@ -344,7 +344,15 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    `03 --extra-machs 0.05 0.2 0.3` (far-field complex error per Mach in `far_field_by_mach`).
    Expectation [unverified]: the cone widens with M (|k| ≤ 3.5 / 6.9 / ~21 at M = 0.05 / 0.1 /
    0.3) and takes in better-predicted modes, so B should fall with M — blindness strongest at
-   low Mach. Incompressible Lighthill is only valid for M ≪ 1, so stop at 0.3. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   low Mach. Incompressible Lighthill is only valid for M ≪ 1, so stop at 0.3.
+   **Seed runs done (`0e580c3`): FNO mse seeds 0/1/2** (`fno_mse_01`, `_s1`, `_s2`):
+   val 2.17/2.30/2.52e-3; field 3.04/3.09/3.16%; source 28.6/29.5/30.8%; far field above
+   c0·dk 19.0/19.6/22.7%; **B 4.71/4.92/5.56e3 (±9%)**; B_S 9.24/9.33/9.51; low-k error/truth at
+   high ω 191/208/226. Rollout metrics are seed-dominated: R/R0 35/62/49, R_T ratio 1.75/14/0.77,
+   P/P0 0.78/0.49/1.11. Consequences: teacher-forced conclusions stand (H¹ ~20× in B is far
+   outside seed spread); unroll4's B 3.70e3 and UNet's 3.93e3 sit just below the seed range
+   (possibly small real effects); unroll4's high-ω excess (349) is outside it (worse);
+   **no rollout comparison from a single run is meaningful** — needs seeds or longer averages. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
