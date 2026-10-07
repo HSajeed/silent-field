@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from .losses import mse_loss, sobolev_loss
+from .losses import mse_loss, sobolev_loss, h1_loss
 
 
 @dataclass
@@ -21,7 +21,8 @@ class TrainConfig:
     batch_size: int = 16
     lr: float = 1e-3
     weight_decay: float = 1e-5
-    loss: str = "mse"            # 'mse' | 'sobolev'
+    loss: str = "mse"            # 'mse' | 'sobolev' | 'h1'
+    unroll: int = 1              # >1: backprop through this many autoregressive steps
     sobolev_order: int = 1
     sobolev_weight: float = 1e-2
     domain_length: float = 2 * np.pi
@@ -44,6 +45,24 @@ def make_pairs(u, v, normalise=True):
         stats = {"mean": float(x.mean()), "std": float(x.std()) or 1.0}
         x = (x - stats["mean"]) / stats["std"]
         y = (y - stats["mean"]) / stats["std"]
+    return (torch.tensor(x, dtype=torch.float32),
+            torch.tensor(y, dtype=torch.float32), stats)
+
+
+def make_windows(u, v, steps, normalise=True):
+    """(nt, n, n) histories -> x=(N,2,n,n) and the next `steps` targets y=(N,steps,2,n,n).
+
+    For unrolled training; normalised exactly as `make_pairs` (same statistics), so
+    steps=1 gives make_pairs' y with an extra axis.
+    """
+    f = np.stack([u, v], axis=1)                     # (nt, 2, n, n)
+    stats = {"mean": 0.0, "std": 1.0}
+    n = len(f) - steps
+    if normalise:
+        stats = {"mean": float(f[:-1].mean()), "std": float(f[:-1].std()) or 1.0}
+        f = (f - stats["mean"]) / stats["std"]
+    x = f[:n]
+    y = np.stack([f[1 + j: 1 + j + n] for j in range(steps)], axis=1)
     return (torch.tensor(x, dtype=torch.float32),
             torch.tensor(y, dtype=torch.float32), stats)
 
@@ -81,7 +100,19 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
             return mse_loss(p, t)
         if cfg.loss == "sobolev":
             return sobolev_loss(p, t, cfg.sobolev_order, cfg.sobolev_weight, cfg.domain_length)
+        if cfg.loss == "h1":
+            return h1_loss(p, t, cfg.domain_length)
         raise ValueError(cfg.loss)
+
+    def step_loss(xb, yb):
+        if yb.ndim == 4:                             # one-step pairs
+            return criterion(model(xb), yb)
+        # unrolled: feed predictions back, keep the graph, average over the steps
+        p, total = xb, 0.0
+        for j in range(yb.shape[1]):
+            p = model(p)
+            total = total + criterion(p, yb[:, j])
+        return total / yb.shape[1]
 
     for epoch in range(len(history), cfg.epochs):
         model.train()
@@ -89,7 +120,7 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
         for xb, yb in loader:
             xb, yb = xb.to(cfg.device), yb.to(cfg.device)
             opt.zero_grad()
-            loss = criterion(model(xb), yb)
+            loss = step_loss(xb, yb)
             loss.backward()
             opt.step()
             running += loss.item() * len(xb)
@@ -97,7 +128,8 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
 
         model.eval()
         with torch.no_grad():
-            val = mse_loss(model(xv.to(cfg.device)), yv.to(cfg.device)).item()
+            yv1 = yv if yv.ndim == 4 else yv[:, 0]       # one-step MSE: comparable across runs
+            val = mse_loss(model(xv.to(cfg.device)), yv1.to(cfg.device)).item()
         history.append({"epoch": epoch, "train": running / len(xt), "val": val})
         if epoch % max(1, cfg.epochs // 10) == 0:
             print(f"  epoch {epoch:3d}  train {running/len(xt):.3e}  val {val:.3e}")

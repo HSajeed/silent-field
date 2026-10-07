@@ -152,7 +152,7 @@ Three bugs fixed, all found by re-deriving the numbers rather than reading the l
    the strongest radiating frequencies if the physical band sees <1% of the radiating
    power, and says so.
 
-Tests: **21 → 42** (61 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
+Tests: **21 → 42** (64 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
 
 ## Method pitfalls (learned the hard way)
 - Compare power **density** (P/dω) across estimators with different segment lengths. Per-bin power is 2.5× off.
@@ -187,7 +187,7 @@ python scripts/05_make_figures.py                                  # slope, [12,
 python scripts/06_sobolev_argument.py                              # Stage 4, no model needed
 python scripts/07_tform_metric.py                                  # R_T (T-form cone share, sub-dk included)
 python scripts/08_mach_scaling.py                                  # radiated power vs M, compact 2D law (~1.5 min; 4π ~6 min)
-python -m pytest -q                                                # 61 passed
+python -m pytest -q                                                # 64 passed
 python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # Stage 3 (GPU); --smoke for a quick check
 python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01
 python scripts/09_blindness.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01      # B, B_S + controls
@@ -302,7 +302,12 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    the field error halves: B characterises the objective, not the model quality. Caveat:
    the energy-weighted lag-1 correlation is dominated by low-ω error and is not decisive
    on its own. Next: FNO with standard H¹ (expect no B change) and with an unrolled
-   multi-step loss (jitter account predicts B and the high-ω far-field excess drop). For any trained Stage-4 run use the standard multiplicative H¹ loss
+   multi-step loss (jitter account predicts B and the high-ω far-field excess drop).
+   **Built for experiments 3–4 (smoke-tested):** `--loss h1` = standard relative H¹
+   (`losses.h1_loss`, neuraloperator-style ||e||_H1/||y||_H1, multiplicative (1+k²), full-plane
+   fft2); `--unroll K` = backprop through K autoregressive steps (`train.make_windows`; unroll=1
+   reproduces one-step training exactly — test). Validation stays one-step MSE so runs compare.
+   Runs: `fno_h1_01` (`--loss h1`), `fno_mse_unroll4` (`--unroll 4`, ~4× the FNO time). For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
