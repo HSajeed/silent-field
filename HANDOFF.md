@@ -20,9 +20,12 @@ Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under
    (`fno_mse_01`, `unet_mse_01`, `fno_h1_01`, `fno_mse_unroll4`) are logged in `stage3_log.md`
    ("Mach sweep"). The sweeps ran in a notebook that was blank on connect (not RunStage3); fine,
    the runner cell is self-contained. Results on Drive `runs/<run>/09_blindness_machs.json`, `machs/`.
-   **Next, agreed in discussion:** train FNO-MSE + FNO-H¹ (2–3 seeds) on `data/turb2d_kf16.npz`
-   (exists; only truth metrics done) to test whether the objective ordering holds on a second flow,
-   then experiment 5. Not yet started.
+   **kf16 replication (in progress, `stage3_log.md` "kf16 replication"):** FNO-MSE seeds 0/1/2 complete
+   (B(M=0.1) 1.75e3 / 1.69e3 / 1.68e3, 4% spread: pattern reproduces). **Unfinished (Colab usage limit
+   hit):** `kf16_fno_h1_s0` has `02`+`03` only → run `09 --machs` (+`10`); `kf16_fno_h1_s1` not started.
+   Re-running the training line resumes from `last.pt` instantly. Criterion 2 (H¹ B ≥ 3× MSE) is open.
+   Then experiment 5. Runner cells in the open notebook: setup cell (mount, pull, copy both datasets),
+   per-run cell with `--data data/turb2d_kf16.npz --seed N`.
 2. **Decide experiment 5.** Candidates: noise-injection training; PDE-Refiner-style refinement;
    the project's open question — a loss weighted by proximity to the sonic line over a time
    window (the evidence so far says the lever is weighting in ω, not unrolling or H¹).
