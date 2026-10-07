@@ -27,7 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.spectral import Grid, divergence
 from src.solvers.vortex_pair import VortexPair
 from src.acoustics.lighthill import lighthill_source, source_timeseries
-from src.acoustics.greens import source_spectrum, far_field_pressure, observer_ring, directivity
+from src.acoustics.greens import (source_spectrum, far_field_pressure, far_field_pressure_ibp,
+                                  observer_ring, directivity)
 
 
 def main():
@@ -153,6 +154,31 @@ def main():
     print(f"[CHECK 4] dphi/dr = {dphi_dr:.5f}   -k = {-k_tone:.5f}  (want dphi/dr ~= -k: outgoing wave)")
     assert abs(dphi_dr - (-k_tone)) < 0.05 * abs(k_tone), \
         f"kernel is not outgoing -- got dphi/dr = {dphi_dr:.5f}, expected ~ {-k_tone:.5f}"
+
+    # ---- CHECK 5 (S-form = T-form): radiating S = d_i d_j T_ij against G and
+    # radiating T_ij against d_i d_j G (`far_field_pressure_ibp`, the form used on
+    # turbulence) must agree, up to the surface term a periodic box leaves when the
+    # velocity does not vanish at its edge. The pair carries net circulation, so that
+    # term is present here too, and it must SHRINK as the box grows around the same
+    # pair: measured 5.3% at L = 2 pi, 0.73% at 4 pi, 0.05% at 8 pi, independent of r.
+    # Exact kernels on both paths, so the O(1/kr) asymptotic error is not mixed in.
+    S_vs_T = {}
+    for mult in (1, 2):
+        gb = Grid(n=mult * args.n, length=mult * grid.length)
+        vpb = VortexPair(grid=gb, circulation=1.0, radius=0.6, core=0.18)
+        ntb, dtb = vpb.suggest_sampling(4, 32)
+        ub, vb = vpb.timeseries(ntb, dtb)
+        sb_hat, omb = source_spectrum(source_timeseries(ub, vb, gb), dtb)
+        tb_hat = {key: source_spectrum(a, dtb)[0] for key, a in (("uu", ub * ub), ("uv", ub * vb), ("vv", vb * vb))}
+        ib = int(np.argmin(np.abs(omb - vpb.omega_acoustic)))
+        ring = observer_ring(r_near, 36, (gb.length / 2, gb.length / 2))
+        pS = far_field_pressure(sb_hat, omb, gb, ring, c0, far_field=False, omega_indices=[ib])[0]
+        pT = far_field_pressure_ibp(tb_hat, omb, gb, ring, c0, [ib], far_field=False)[0]
+        S_vs_T[mult] = float(np.linalg.norm(pS - pT) / np.linalg.norm(pT))
+    print(f"[CHECK 5] |p_S - p_T| / |p_T| at the tone: L = 2pi {S_vs_T[1]:.4f}, "
+          f"L = 4pi {S_vs_T[2]:.4f}  (want < 0.02 at 4pi, and shrinking with L: box surface term)")
+    assert S_vs_T[2] < 0.02, f"S-form and T-form far fields disagree by {S_vs_T[2]:.3f} at L = 4pi"
+    assert S_vs_T[2] < S_vs_T[1] / 3, "S/T difference does not shrink with the box -- not a surface term"
 
     out = Path(args.outdir); out.mkdir(exist_ok=True, parents=True)
     try:

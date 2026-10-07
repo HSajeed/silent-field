@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """STAGE 3 -- the error triple: field vs source vs far field.
 
+The far field is radiated in the T-form (u_i u_j against the exact d_i d_j G): the
+S-form also integrates a spurious box-edge term in a periodic box (Sarkar & Hussaini
+1993; review_2026-10-01.md section 1), and the compact term radiates below c0*dk.
+
 Reports the contrast the project rests on. The field error is the number papers
 publish; the source and far-field errors are what the flow actually sounds like.
 
@@ -9,20 +13,80 @@ publish; the source and far-field errors are what the flow actually sounds like.
 import argparse, json, sys
 from pathlib import Path
 import numpy as np
+from scipy.signal.windows import tukey
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.spectral import Grid
 from src.solvers.io import load_dataset
 from src.diagnostics.errors import error_triple, relative_l2
 from src.diagnostics.divergence import divergence_error, dilatational_energy_fraction
-from src.acoustics.lighthill import source_timeseries
 from src.acoustics.greens import (
     source_spectrum,
-    far_field_pressure,
+    far_field_pressure_ibp,
     observer_ring,
     select_band,
 )
 from src.acoustics.komega import sound_speed
+
+
+def far_field_error(ut, vt, up, vp, grid, dt, c0, n_obs, n_band, band_mode, min_fraction):
+    """T-form far-field error of prediction (up, vp) against truth (ut, vt).
+
+    Returns (errors dict, band metadata).  Radiates the spatially tapered T_ij = u_i u_j
+    against the exact d_i d_j G, so no spurious box-edge surface term (Sarkar & Hussaini
+    1993), and the band includes omega < c0*dk where the compact (k = 0) term dominates.
+    """
+    # Tukey(0.5) spatial taper: a hard box edge leaks convective-ridge content into
+    # small k (see src/acoustics/tform.py); same taper as R_T in scripts/07.
+    taper = np.outer(tukey(grid.n, 0.5, sym=False), tukey(grid.n, 0.5, sym=False))
+
+    def stress_spectra(u, v):
+        T = {"uu": u * u, "uv": u * v, "vv": v * v}
+        hats = {}
+        for key in T:
+            T[key] -= T[key].mean(axis=0)     # steady part does not radiate; Hann leakage
+            T[key] *= taper
+            hats[key], om = source_spectrum(T[key], dt)
+            T[key] = None
+        return hats, om
+
+    hat_t, om = stress_spectra(ut, vt)
+    hat_p, _ = stress_spectra(up, vp)
+    truth_power = ((np.abs(hat_t["uu"]) ** 2 + 2 * np.abs(hat_t["uv"]) ** 2
+                    + np.abs(hat_t["vv"]) ** 2).sum(axis=(1, 2)))
+
+    band, meta = select_band(om, c0, grid, n_band, mode=band_mode, power=truth_power,
+                             min_fraction=min_fraction)
+    if not band:
+        sys.exit(f"no radiating frequencies available: {meta.get('error')}")
+    k_min = om[band[0]] / c0
+    radius = max(30 * grid.length, 10 / k_min)
+    meta["kr_range"] = [float(om[band[0]] / c0 * radius), float(om[band[-1]] / c0 * radius)]
+    meta["radius"] = float(radius)
+    if meta.get("fallback_reason"):
+        print(f"[band] {meta['fallback_reason']}; using mode '{meta['mode']}'")
+    print(f"[band] mode={meta['mode']}  {meta['n_selected']} frequencies, "
+          f"omega in [{meta['omega_band'][0]:.3f}, {meta['omega_band'][1]:.2f}], "
+          f"k in [{meta['k_band'][0]:.3f}, {meta['k_band'][1]:.2f}]")
+    print(f"[band] c0*dk = {meta['omega_min_radiating']:.2f}; "
+          f"{int((om[band] < meta['omega_min_radiating']).sum())} band frequencies below it")
+    print(f"[band] kr in [{meta['kr_range'][0]:.0f}, {meta['kr_range'][1]:.0f}] "
+          f"at r={radius:.0f}")
+    if meta.get("source_power_fraction_captured") is not None:
+        print(f"[band] captures {meta['source_power_fraction_captured']:.2%} of the "
+              f"truth stress's omega>0 power")
+
+    obs = observer_ring(radius, n_obs, (grid.length / 2, grid.length / 2))
+    pt = far_field_pressure_ibp(hat_t, om, grid, obs, c0, band, far_field=False)
+    del hat_t
+    pp = far_field_pressure_ibp(hat_p, om, grid, obs, c0, band, far_field=False)
+    errs = {
+        "far_field": relative_l2(np.abs(pp), np.abs(pt)),
+        "far_field_complex": float(np.linalg.norm(pp - pt) / np.linalg.norm(pt)),
+        "far_field_form": "T (far_field_pressure_ibp, exact kernel, Tukey 0.5 spatial taper)",
+        "far_field_radius": float(radius),
+    }
+    return errs, meta
 
 
 def main():
@@ -33,8 +97,10 @@ def main():
     ap.add_argument("--n-obs", type=int, default=36)
     ap.add_argument("--n-band", type=int, default=24,
                     help="number of radiating frequencies in the far-field band.")
-    ap.add_argument("--band-mode", choices=("auto", "k", "top"), default="auto",
-                    help="'k' = the lowest radiating box modes; 'top' = the "
+    ap.add_argument("--band-mode", choices=("omega", "auto", "k", "top"), default="omega",
+                    help="'omega' = log-spaced from the first bin to Nyquist, no radiation cut "
+                         "(T-form: the compact term radiates at every omega); "
+                         "'k' = the lowest radiating box modes; 'top' = the "
                          "strongest radiating frequencies of the truth source; "
                          "'auto' tries 'k' and falls back to 'top' if the band "
                          "captures under --min-cone-fraction of the radiating power.")
@@ -83,49 +149,18 @@ def main():
     print(f"{'div(u) error, prediction':<34}"
           f"{np.mean([divergence_error(up[i],vp[i],grid) for i in range(0,len(up),8)]):>13.2e}")
 
-    # far field
     u_rms = float(np.sqrt(np.mean(ut**2 + vt**2)))
     c0 = sound_speed(u_rms, args.mach)
-    St = source_timeseries(ut, vt, grid)
-    Sp = source_timeseries(up, vp, grid)
-    sht, om = source_spectrum(St, dt)
-    shp, _ = source_spectrum(Sp, dt)
-
-    obs = observer_ring(30*grid.length, args.n_obs, (grid.length/2, grid.length/2))
-    radius = 30 * grid.length
-    truth_power = (np.abs(sht) ** 2).sum(axis=(1, 2))     # per-frequency, truth only
-
-    band, meta = select_band(om, c0, grid, args.n_band, mode=args.band_mode,
-                             power=truth_power, radius=radius,
-                             min_fraction=args.min_cone_fraction)
-    if not band:
-        sys.exit(f"no radiating frequencies available: {meta.get('error')}")
-    if meta.get("fallback_reason"):
-        print(f"[band] {meta['fallback_reason']}; using mode '{meta['mode']}'")
-
-    print(f"[band] mode={meta['mode']}  {meta['n_selected']} frequencies, "
-          f"omega in [{meta['omega_band'][0]:.2f}, {meta['omega_band'][1]:.2f}], "
-          f"k in [{meta['k_band'][0]:.2f}, {meta['k_band'][1]:.2f}]")
-    print(f"[band] lowest radiating frequency is c0*dk = {meta['omega_min_radiating']:.2f} "
-          f"({meta['n_radiating_available']} of {len(om)} bins qualify)")
-    print(f"[band] kr in [{meta['kr_range'][0]:.0f}, {meta['kr_range'][1]:.0f}] "
-          f"at r={radius:.0f} (far-field asymptote needs kr >> 1)")
-    if meta.get("band_share_of_radiating_power") is not None:
-        print(f"[band] captures {meta['source_power_fraction_captured']:.2%} of the "
-              f"truth source's omega>0 power, "
-              f"{meta['band_share_of_radiating_power']:.1%} of what is radiating at all "
-              f"({meta['radiating_power_fraction_available']:.2%} of the total)")
-
-    pt = far_field_pressure(sht, om, grid, obs, c0, True, band)
-    pp = far_field_pressure(shp, om, grid, obs, c0, True, band)
-    ff = relative_l2(np.abs(pp), np.abs(pt))
-    print(f"{'far-field pressure error':<34}{ff:>13.2%}")
+    errs, meta = far_field_error(ut, vt, up, vp, grid, dt, c0, args.n_obs, args.n_band,
+                                 args.band_mode, args.min_cone_fraction)
+    print(f"{'far-field |p| error (T-form)':<34}{errs['far_field']:>13.2%}")
+    print(f"{'far-field complex error (T-form)':<34}{errs['far_field_complex']:>13.2%}")
     print("=" * 62)
     print("\nThe first row is what gets published. The rest is what the flow sounds like.")
 
     out = Path(args.outdir); out.mkdir(parents=True, exist_ok=True)
     (out/"03_errors.json").write_text(json.dumps(
-        {**trip, "far_field": ff, "mach": args.mach, "c0": c0, "far_field_band": meta},
+        {**trip, **errs, "mach": args.mach, "c0": c0, "far_field_band": meta},
         indent=2))
 
 

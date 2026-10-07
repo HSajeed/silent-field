@@ -3,7 +3,8 @@ import sys; from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from scipy.special import hankel2
-from src.acoustics.greens import greens_2d
+from src.acoustics.greens import greens_2d, far_field_pressure_ibp
+from src.spectral import Grid
 
 def test_matches_hankel():
     """Under np.fft.rfft's e^{+i omega t} synthesis, the outgoing kernel is
@@ -159,3 +160,62 @@ def test_auto_band_falls_back_to_top_when_k_under_covers():
     _, kept = select_band(om, c0, grid, n_band=24, mode="auto", power=power,
                           min_fraction=0.01)
     assert kept["mode"] == "k"
+
+
+def _point_stress(grid, comp, iy=3, ix=5):
+    """A single-cell stress in component `comp` at one frequency, plus its location."""
+    hat = {c: np.zeros((2, grid.n, grid.n), complex) for c in ("uu", "uv", "vv")}
+    hat[comp][1, iy, ix] = 1.0
+    X, Y = grid.meshgrid()
+    return hat, np.array([X[iy, ix], Y[iy, ix]])
+
+
+def test_ibp_exact_kernel_matches_finite_differences_of_G():
+    """far_field=False must be the exact d_i d_j G: check it against central
+    differences of the exact Hankel G in the observer position, at small kr where the
+    asymptotic kernel is visibly wrong."""
+    grid = Grid(n=8)
+    omega, c0 = np.array([0.0, 2.0]), 1.0
+    k = omega[1] / c0
+    obs = np.array([[4.0, 1.5], [-1.0, 3.0]])
+    h = 1e-4
+    for comp, (a, b) in {"uu": (0, 0), "uv": (0, 1), "vv": (1, 1)}.items():
+        hat, y = _point_stress(grid, comp)
+        p = far_field_pressure_ibp(hat, omega, grid, obs, c0, [1], far_field=False)[0]
+        ea, eb = np.eye(2)[a] * h, np.eye(2)[b] * h
+        G = lambda x: greens_2d(k, np.hypot(*(x - y)))
+        fd = np.array([(G(x + ea + eb) - G(x + ea - eb) - G(x - ea + eb) + G(x - ea - eb))
+                       / (4 * h * h) for x in obs])
+        mult = 2.0 if comp == "uv" else 1.0          # T_xy and T_yx both contribute
+        np.testing.assert_allclose(p, mult * fd * grid.dx**2, rtol=1e-5)
+
+
+def test_ibp_asymptotic_kernel_converges_to_exact_as_one_over_kr():
+    grid = Grid(n=8)
+    omega, c0 = np.array([0.0, 2.0]), 1.0
+    hat, y = _point_stress(grid, "uu")
+    errs = []
+    for r in (50.0, 200.0, 800.0):
+        obs = y + r * np.array([[np.cos(0.3), np.sin(0.3)]])
+        pf = far_field_pressure_ibp(hat, omega, grid, obs, c0, [1], far_field=True)[0]
+        pe = far_field_pressure_ibp(hat, omega, grid, obs, c0, [1], far_field=False)[0]
+        errs.append(abs(pf - pe) / abs(pe))
+    assert errs[0] < 0.05
+    np.testing.assert_allclose(errs[0] / errs[1], 4.0, rtol=0.1)
+    np.testing.assert_allclose(errs[1] / errs[2], 4.0, rtol=0.1)
+
+
+def test_omega_band_reaches_below_the_radiation_cone_and_spans_the_record():
+    from src.acoustics.greens import radiating_band, select_band
+
+    om = _omega()
+    grid = Grid(n=128)
+    c0 = 11.308
+    idx, meta = radiating_band(om, c0, grid, n_band=24, mode="omega")
+
+    assert idx == sorted(set(idx)) and len(idx) <= 24
+    assert (om[idx] < c0 * (2 * np.pi / grid.length)).any()
+    assert idx[0] == 1 and idx[-1] == len(om) - 1
+    assert meta["n_radiating_available"] == int((om > 0).sum())
+    sel_idx, sel_meta = select_band(om, c0, grid, n_band=24, mode="omega")
+    assert sel_idx == idx and "fallback_reason" not in sel_meta

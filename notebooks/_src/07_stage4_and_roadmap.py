@@ -34,8 +34,8 @@ c0 = sound_speed(U, 0.1)
 # %% [markdown]
 # ## 1. Stage 4 analysis with the factor-2 correction
 #
-# Chapter 05 §2.2 showed that `additive_sobolev_weight` is 2× too large for every mode with
-# kx ≠ 0. The cell below redoes the λ sweep with the per-mode factor n/(n+2) instead of
+# Chapter 05 §2.2 showed that `additive_sobolev_weight` was 2× too large for every mode with
+# kx ≠ 0 (fixed in the code on 2026-10-07). The cell below redoes the λ sweep with the per-mode factor n/(n+2) instead of
 # n/(n/2+1).
 #
 # **One approximation, stated:** the resolved spectrum sums power over all modes with the
@@ -51,8 +51,8 @@ l2 = weighted_cone_share(spec.power_resolved, np.ones_like(k)[None, :], mask)
 as_coded = [weighted_cone_share(spec.power_resolved, (1 + l * grid.n / (grid.n // 2 + 1) * w_norm)[None, :], mask) / l2 for l in lams]
 corrected = [weighted_cone_share(spec.power_resolved, (1 + l * grid.n / (grid.n + 2) * w_norm)[None, :], mask) / l2 for l in lams]
 mult = effective_weight_in_cone(spec, c0, "h1", convention="multiplicative") / l2
-plt.semilogx(lams, as_coded, color=style.OLD, label="additive, as coded (2× too strong)")
-plt.semilogx(lams, corrected, color=style.NEW, label="additive, corrected")
+plt.semilogx(lams, as_coded, color=style.OLD, label="additive, as coded at the review (2× too strong)")
+plt.semilogx(lams, corrected, color=style.NEW, label="additive, corrected (= current code)")
 plt.axhline(mult, color=style.REF, ls="--", label=f"multiplicative (1+k²): {mult:.3f}× (neuraloperator H1Loss form)")
 plt.axvline(1e-2, color=style.REF, ls=":", label="repo default λ = 1e-2")
 plt.xlabel("λ"); plt.ylabel("cone share ÷ L2 cone share"); plt.legend(fontsize=8); plt.title("Stage 4 at M = 0.1")
@@ -163,12 +163,12 @@ post = ENV.cache / "post_tier0_boxes.json"
 PLAN = [
     ("1a", "Gate check: S-form = T-form on the vortex pair at its tone",
      "agreement measured (ch. 01 §6: ~2% magnitude, ~6% complex); tolerance + gate code pending", "in progress"),
-    ("1b", "Switch scripts/03 to far_field_pressure_ibp; revisit the band", "T-form error used in ch. 06", "todo"),
+    ("1b", "Switch scripts/03 to far_field_pressure_ibp; revisit the band", "T-form error used in ch. 06", "done 2026-10-07 (scripts/03 uses the T-form); band revisit pending"),
     ("1c", "Define the radiating content on T_ij (replaces R_S)", "derivation + test", "todo"),
     ("1d", "Post-fix numbers for kf16 and L = 4π (HANDOFF open item 1)",
      "done in ch. 03 §6 without chunking" if post.exists() else "ch. 03 §6", "done" if post.exists() else "todo"),
     ("2", "Fix the factor 2 in additive_sobolev_weight; non-circular test; restate Stage 4",
-     "test calls sobolev_loss on single modes", "todo (analysis shown in §1)"),
+     "test calls sobolev_loss on single modes", "done 2026-10-07 (weight fixed); non-circular test + restated Stage 4 pending"),
     ("3", "Mach scaling: drop the compactness rationale; compare T-form radiated power with M⁷", "—", "todo"),
     ("4", "Stage 3: train FNO + UNet; error triple; B and B_S with both controls", "ch. 06", "partly runnable"),
     ("5", "Causal test: multi-step / temporal loss", "B and B_S drop", "todo"),

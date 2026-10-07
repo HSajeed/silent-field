@@ -132,12 +132,12 @@ class KOmegaSpectrum:
 
 
 # ------------------------------------------------------------------- estimation
-def _radial_resolve(power: np.ndarray, k_sq: np.ndarray, chunk: int = 64) -> tuple[np.ndarray, np.ndarray]:
+def _radial_resolve(power: np.ndarray, k_sq: np.ndarray, dk: float, chunk: int = 64) -> tuple[np.ndarray, np.ndarray]:
     """Sum `power` over modes sharing each distinct |k|, keeping every grid mode.
 
-    Grouping is done on k^2 rather than |k| because the squared wavenumbers are exact
-    integers on a periodic grid, so two modes that ought to share a bin provably do --
-    no floating-point tolerance, no accidental near-duplicate groups.
+    Grouping is done on the integer m2 = kx^2 + ky^2 in mode-index units, recovered as
+    rint(k_sq / dk^2).  `grid.k_sq` itself is only integer up to floating-point error
+    (~1e-12), and `np.unique` on the raw floats splits shells that ought to be one.
 
     The gather that sorting implies is applied in chunks along the frequency axis.  A
     full fancy-index copy of the (n_omega, n^2) array would be 1.1 GB at n = 256,
@@ -145,15 +145,15 @@ def _radial_resolve(power: np.ndarray, k_sq: np.ndarray, chunk: int = 64) -> tup
     to a few tens of MB.
     """
     flat = power.reshape(power.shape[0], -1)
-    order = np.argsort(k_sq, kind="stable")
-    k_sq_sorted = k_sq[order]
-    unique_k_sq, starts = np.unique(k_sq_sorted, return_index=True)
+    m2 = np.rint(k_sq / dk**2).astype(np.int64)
+    order = np.argsort(m2, kind="stable")
+    unique_m2, starts = np.unique(m2[order], return_index=True)
 
-    out = np.empty((flat.shape[0], unique_k_sq.size), dtype=flat.dtype)
+    out = np.empty((flat.shape[0], unique_m2.size), dtype=flat.dtype)
     for lo in range(0, flat.shape[0], chunk):
         hi = min(lo + chunk, flat.shape[0])
         out[lo:hi] = np.add.reduceat(flat[lo:hi, order], starts, axis=1)
-    return np.sqrt(unique_k_sq), out
+    return dk * np.sqrt(unique_m2), out
 
 
 def komega_spectrum(
@@ -244,7 +244,7 @@ def komega_spectrum(
     # The binned grid above stops at n_k_bins and the cone mask is applied to it in
     # `radiating_mask`, which is fine for plotting and wrong for arithmetic.  Keep an
     # untruncated, radially *resolved* companion for the metric itself.
-    k_res, power_res = _radial_resolve(power, grid.k_sq.ravel())
+    k_res, power_res = _radial_resolve(power, grid.k_sq.ravel(), dk)
 
     return KOmegaSpectrum(power=binned, k_bins=centres, omega=omega,
                           k_resolved=k_res, power_resolved=power_res)
@@ -287,6 +287,26 @@ def welch_komega_spectrum(
         raise ValueError("record too short for the requested segmentation")
     return KOmegaSpectrum(power=acc / count, k_bins=last.k_bins, omega=last.omega,
                           k_resolved=last.k_resolved, power_resolved=acc_res / count)
+
+
+def velocity_komega_spectrum(
+    u: np.ndarray, v: np.ndarray, grid: Grid, dt: float, n_segments: int = 1
+) -> KOmegaSpectrum:
+    """Two-component velocity spectrum, transforming u and v one at a time.
+
+    Identical to `komega_spectrum` on `np.stack([u, v], axis=-1)` (component powers
+    are summed there too) but never holds the stacked float64 array, which is what
+    lets n = 256 fit in a few GB.  Welch-averaged when `n_segments` > 1.
+    """
+    def one(f):
+        return (welch_komega_spectrum(f, grid, dt, n_segments=n_segments)
+                if n_segments > 1 else komega_spectrum(f, grid, dt))
+
+    su = one(u)
+    sv = one(v)
+    return KOmegaSpectrum(power=su.power + sv.power, k_bins=su.k_bins, omega=su.omega,
+                          k_resolved=su.k_resolved,
+                          power_resolved=su.power_resolved + sv.power_resolved)
 
 
 # ------------------------------------------------------------------- convenience
