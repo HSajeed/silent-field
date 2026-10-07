@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--ckpt-dir", default=None,
                     help="fast scratch for per-epoch checkpoints (default /content/ckpt on Colab, else --out)")
     ap.add_argument("--save-every", type=int, default=5)
+    ap.add_argument("--seed", type=int, default=0,
+                    help="seeds the weight initialisation and the batch order")
     ap.add_argument("--smoke", action="store_true",
                     help="first 64 snapshots, 2 epochs: a quick CPU check of the whole path")
     args = ap.parse_args()
@@ -76,13 +78,14 @@ def main():
     print(f"{len(x)} {'one-step pairs' if args.unroll == 1 else f'{args.unroll}-step windows'}, "
           f"{u.shape[-1]}^2 grid, loss={args.loss}")
 
+    torch.manual_seed(args.seed)                     # weight initialisation
     model = FNO2d(modes=min(24, u.shape[-1]//4), width=48) if args.model == "fno" \
         else UNet2d(base=48, depth=3)
     n_par = sum(p.numel() for p in model.parameters())
     print(f"{args.model.upper()}: {n_par/1e6:.2f}M parameters")
 
     cfg = TrainConfig(epochs=epochs, batch_size=args.batch_size, loss=args.loss,
-                      unroll=args.unroll, domain_length=meta["grid_length"])
+                      unroll=args.unroll, domain_length=meta["grid_length"], seed=args.seed)
     gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none"
     print(f"device {cfg.device} (GPU: {gpu})")
 
@@ -90,15 +93,16 @@ def main():
     last = out / "last.pt"
     if last.exists():
         resume = torch.load(last, map_location="cpu", weights_only=False)
-        if (resume["arch"], resume["loss"], resume["epochs"], resume.get("unroll", 1)) != \
-                (args.model, args.loss, epochs, args.unroll):
+        if (resume["arch"], resume["loss"], resume["epochs"], resume.get("unroll", 1),
+                resume.get("seed", 0)) != (args.model, args.loss, epochs, args.unroll, args.seed):
             sys.exit(f"{last} is a different run (arch/loss/epochs); use a new --out")
         print(f"resuming from {last} at epoch {len(resume['history'])}")
 
     def save(epoch, model, opt, sched, history):
         state = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                  "history": history, "rng": torch.get_rng_state(),
-                 "arch": args.model, "loss": args.loss, "epochs": epochs, "unroll": args.unroll}
+                 "arch": args.model, "loss": args.loss, "epochs": epochs, "unroll": args.unroll,
+                 "seed": args.seed}
         torch.save(state, ckpt_dir / "last.pt")
         if ckpt_dir != out and ((epoch + 1) % args.save_every == 0 or epoch + 1 == epochs):
             shutil.copy2(ckpt_dir / "last.pt", last)
@@ -106,7 +110,7 @@ def main():
     model, hist = train(model, x, y, cfg, on_epoch_end=save, resume=resume)
 
     final = {"state_dict": model.state_dict(), "arch": args.model, "loss": args.loss,
-             "unroll": args.unroll,
+             "unroll": args.unroll, "seed": args.seed,
              "stats": stats, "meta": meta, "n": u.shape[-1], "history": hist}
     torch.save(final, ckpt_dir / "model.pt")
     if ckpt_dir != out:
@@ -117,7 +121,7 @@ def main():
     print("\n" + "=" * 60)
     print("SUMMARY  scripts/02_train_surrogate.py")
     print(f"  model        {args.model.upper()}  ({n_par/1e6:.2f}M params), loss {args.loss}, "
-          f"unroll {args.unroll}")
+          f"unroll {args.unroll}, seed {args.seed}")
     print(f"  data         {args.data}  ({len(x)} pairs{', SMOKE' if args.smoke else ''})")
     print(f"  epochs       {len(hist)}   device {cfg.device} ({gpu})")
     print(f"  final        train {hist[-1]['train']:.3e}   val {hist[-1]['val']:.3e}  "
