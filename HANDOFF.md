@@ -7,6 +7,7 @@ Tier-0 correctness work: `TIER0_PLAN.md`. Read those only when an item below say
 **Post-Tier-0 review (2026-10-01): `review_2026-10-01.md` — read before Stage 3.** It finds the
 far field / R_S use the periodic-box-unsafe S-form (7–168× artifact; fix = `far_field_pressure_ibp`),
 reframes Stage 4, corrects the M⁸/compactness decision, and audits `branch_analysis.md`.
+**Literature check (2026-10-07): `lit_review_2026-10-07.md`** — PDE-Refiner is the closest framing; no prior (k, ω)/sonic-cone surrogate analysis found (limited search).
 **Colab notebooks (2026-10-01): `notebooks/README.md`.** Chapters 00–07 rerun the whole history
 (old commit `2535bb4` beside current code, every logged number asserted) and lay out Stages 3–4.
 Branch `tier0-review-notebooks`; remote `origin` = github.com/HSajeed/silent-field (private).
