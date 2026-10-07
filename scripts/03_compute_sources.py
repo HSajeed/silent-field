@@ -8,9 +8,10 @@ S-form also integrates a spurious box-edge term in a periodic box (Sarkar & Huss
 Reports the contrast the project rests on. The field error is the number papers
 publish; the source and far-field errors are what the flow actually sounds like.
 
-    python scripts/03_compute_sources.py --data data/turb2d.npz --model runs/model.pt
+    python scripts/03_compute_sources.py --data data/turb2d.npz --model runs/fno_mse/model.pt --out runs/fno_mse
+    python scripts/03_compute_sources.py --smoke --model tmp/smoke02/model.pt --out tmp/smoke03
 """
-import argparse, json, sys
+import argparse, json, sys, time
 from pathlib import Path
 import numpy as np
 from scipy.signal.windows import tukey
@@ -107,8 +108,12 @@ def main():
     ap.add_argument("--min-cone-fraction", type=float, default=0.01,
                     help="minimum share of the radiating source power the band must "
                          "capture before 'auto' accepts it.")
-    ap.add_argument("--outdir", default="figures")
+    ap.add_argument("--out", "--outdir", dest="out", default="figures",
+                    help="folder for 03_errors.json (the run folder of the model)")
+    ap.add_argument("--smoke", action="store_true",
+                    help="first 64 snapshots and a 6-frequency band: a quick CPU check")
     args = ap.parse_args()
+    t0 = time.time()
 
     try:
         import torch
@@ -120,6 +125,8 @@ def main():
     from src.models.train import TrainConfig, make_pairs, predict_onestep, denormalise
 
     u, v, meta = load_dataset(args.data)
+    if args.smoke:
+        u, v, args.n_band = u[:64], v[:64], 6
     grid = Grid(n=u.shape[-1], length=meta["grid_length"])
     dt = meta["dt"]
 
@@ -130,7 +137,8 @@ def main():
     stats = ckpt["stats"]
 
     x, y, _ = make_pairs(u, v)
-    pred = predict_onestep(model, x, TrainConfig())
+    cfg = TrainConfig()
+    pred = predict_onestep(model, x, cfg)
     pred = denormalise(pred, stats)
     up, vp = pred[:, 0], pred[:, 1]
     ut, vt = u[1:], v[1:]
@@ -158,10 +166,24 @@ def main():
     print("=" * 62)
     print("\nThe first row is what gets published. The rest is what the flow sounds like.")
 
-    out = Path(args.outdir); out.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     (out/"03_errors.json").write_text(json.dumps(
-        {**trip, **errs, "mach": args.mach, "c0": c0, "far_field_band": meta},
+        {**trip, **errs, "mach": args.mach, "c0": c0, "far_field_band": meta,
+         "model": str(args.model), "data": args.data, "smoke": args.smoke},
         indent=2))
+
+    print("\n" + "=" * 60)
+    print("SUMMARY  scripts/03_compute_sources.py  (teacher-forced one-step)")
+    print(f"  model        {args.model}  ({ckpt['arch'].upper()}, loss {ckpt.get('loss', '?')})")
+    print(f"  data         {args.data}  ({len(up)} predicted steps{', SMOKE' if args.smoke else ''})")
+    print(f"  field error  {trip['field']:.2%}")
+    print(f"  source error {trip['source']:.2%}")
+    print(f"  far field    |p| {errs['far_field']:.2%}   complex {errs['far_field_complex']:.2%}"
+          f"   (T-form, M={args.mach}, {meta['n_selected']} freqs, "
+          f"omega {meta['omega_band'][0]:.3g}-{meta['omega_band'][1]:.3g})")
+    print(f"  device       {cfg.device}   wall time {(time.time() - t0) / 60:.1f} min")
+    print(f"  results      {out / '03_errors.json'}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

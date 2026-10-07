@@ -151,7 +151,7 @@ Three bugs fixed, all found by re-deriving the numbers rather than reading the l
    the strongest radiating frequencies if the physical band sees <1% of the radiating
    power, and says so.
 
-Tests: **21 → 42** (57 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
+Tests: **21 → 42** (59 after 2026-10-07). Gate `00` re-run, unchanged, PASS (CHECK 5 added 2026-10-07). Fix 3's ω ≥ c₀·dk band is superseded by `--band-mode omega` (Decisions).
 
 ## Method pitfalls (learned the hard way)
 - Compare power **density** (P/dω) across estimators with different segment lengths. Per-bin power is 2.5× off.
@@ -186,7 +186,9 @@ python scripts/05_make_figures.py                                  # slope, [12,
 python scripts/06_sobolev_argument.py                              # Stage 4, no model needed
 python scripts/07_tform_metric.py                                  # R_T (T-form cone share, sub-dk included)
 python scripts/08_mach_scaling.py                                  # radiated power vs M, compact 2D law (~1.5 min; 4π ~6 min)
-python -m pytest -q                                                # 57 passed
+python -m pytest -q                                                # 59 passed
+python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # Stage 3 (GPU); --smoke for a quick check
+python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01
 python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --out <path>
 ```
 
@@ -204,9 +206,14 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
 5. **Comment nits in `scripts/00_validate_acoustics.py`:** preliminary checks still
    carry "CHECK 1/2" comment headers, and the CHECK 2 comment says "four-lobe".
 6. **Packaging:** `pyproject.toml` (git, `.gitignore` excluding `data/`, and the GitHub remote now exist).
-7. **Stage 3:** FNO/UNet training (`scripts/02`, `03`). Not started. The T-form far field is
-   now in place in `03` (band diagnostics in `03_errors.json`), but it has never been run on
-   a trained model. For any trained Stage-4 run use the standard multiplicative H¹ loss
+7. **Stage 3:** FNO/UNet training (`scripts/02`, `03`). Not started, but Colab-ready
+   (2026-10-07): both scripts take `--smoke` and `--out <run dir>`; `02` checks the dataset
+   sha256, checkpoints every epoch to `--ckpt-dir` (`/content/ckpt` on Colab), copies to
+   `--out` every `--save-every` epochs, resumes from `<out>/last.pt`, and both end with a
+   SUMMARY block. Smoke runs pass locally. The workflow and runner cell are in `colabmcp.md`
+   (local, untracked); Drive layout as the notebooks (`MyDrive/silent-field/{data,runs}`).
+   Next: train `fno_mse_01` on Colab, run `03` on it, then implement B/B_S + the two controls
+   (review §4.2). The T-form far field in `03` has never been run on a trained model. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 

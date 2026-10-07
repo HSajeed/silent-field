@@ -80,8 +80,8 @@ headline figure and the Stage-4 argument need neither torch nor a GPU.
 
 Training (optional, Stage 3):
 ```bash
-python scripts/02_train_surrogate.py --model fno
-python scripts/03_compute_sources.py         # field vs source vs far-field error
+python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01      # --smoke for a quick check
+python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01   # field vs source vs far-field error
 ```
 
 ## The validation gate
@@ -156,5 +156,5 @@ src/acoustics/tform.py     T-form cone share R_T (sub-dk included), radiated pow
 src/solvers/               2D NS (pseudospectral), vortex pair, IO
 src/models/                FNO, UNet, losses, vanilla training
 src/diagnostics/           spectra, spurious dilatation, the error triple
-tests/                     57 tests, all passing
+tests/                     59 tests, all passing
 ```
