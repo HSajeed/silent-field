@@ -337,7 +337,14 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
      literature baselines.
    **Seeding (2026-10-07):** runs up to `f261e06` built the model before seeding, so their
    weight initialisation was unseeded (batch order was seeded, seed 0). `scripts/02 --seed N`
-   now seeds both; two `--seed 1` smoke runs are identical. Seed runs: `fno_mse_s1`, `fno_mse_s2`. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   now seeds both; two `--seed 1` smoke runs are identical. Seed runs: `fno_mse_s1`, `fno_mse_s2`.
+   **Mach sweep (built, smoke-tested):** every Stage-3 number so far is at M=0.1. Mach is an
+   analysis knob (c0 = U/M; predictions unchanged), so no retraining: `09 --machs 0.05 0.1 0.2
+   0.3` (writes `09_blindness_machs.json`; spectra computed once, reused per Mach) and
+   `03 --extra-machs 0.05 0.2 0.3` (far-field complex error per Mach in `far_field_by_mach`).
+   Expectation [unverified]: the cone widens with M (|k| ≤ 3.5 / 6.9 / ~21 at M = 0.05 / 0.1 /
+   0.3) and takes in better-predicted modes, so B should fall with M — blindness strongest at
+   low Mach. Incompressible Lighthill is only valid for M ≪ 1, so stop at 0.3. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
