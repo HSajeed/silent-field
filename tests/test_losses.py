@@ -86,3 +86,16 @@ def test_sobolev_loss_is_differentiable():
     loss.backward()
     assert pred.grad is not None
     assert torch.isfinite(pred.grad).all()
+
+
+def test_h1_loss_is_relative_and_weights_high_k_more():
+    from src.models.losses import h1_loss
+    n = 32
+    x = torch.linspace(0, 2 * torch.pi, n + 1)[:-1]
+    X, Y = torch.meshgrid(x, x, indexing="xy")
+    target = (torch.cos(X) + torch.sin(2 * Y))[None, None]
+    assert h1_loss(target, target).item() == 0.0
+    assert abs(h1_loss(2 * target, target).item() - 1.0) < 1e-5     # relative error 1
+    low = target + 0.1 * torch.cos(2 * X)[None, None]
+    high = target + 0.1 * torch.cos(10 * X)[None, None]             # same L2 error, higher k
+    assert h1_loss(high, target).item() > 3 * h1_loss(low, target).item()

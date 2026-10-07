@@ -129,7 +129,7 @@ def main():
 
     o = Path(args.out); o.mkdir(parents=True, exist_ok=True)
     (o / "10_error_diagnostic.json").write_text(json.dumps(
-        {**out, "model_path": str(args.model), "arch": ckpt["arch"], "loss": ckpt.get("loss"),
+        {**out, "model_path": str(args.model), "arch": ckpt["arch"], "loss": ckpt.get("loss"), "unroll": ckpt.get("unroll", 1),
          "smoke": args.smoke}, indent=2))
     try:
         import matplotlib; matplotlib.use("Agg")
@@ -163,7 +163,7 @@ def main():
         print(f"(plot skipped: {e})")
 
     print("\n" + "=" * 78)
-    print(f"SUMMARY  scripts/10_error_diagnostic.py  ({ckpt['arch'].upper()} {ckpt.get('loss', '')}, "
+    print(f"SUMMARY  scripts/10_error_diagnostic.py  ({ckpt['arch'].upper()} {ckpt.get('loss', '')} unroll {ckpt.get('unroll', 1)}, "
           f"M={args.mach}{', SMOKE' if args.smoke else ''})")
     print(f"  cone |k| range <= {k_cone:.2f};  aliasing band |k| > {k_alias:.1f}")
     print(f"  {'':<34}{'model':>12}{'copy-input':>12}{'truth':>10}")

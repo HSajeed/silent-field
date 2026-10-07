@@ -254,7 +254,7 @@ def main():
 
     print("\n" + "=" * 60)
     print("SUMMARY  scripts/03_compute_sources.py  (teacher-forced one-step)")
-    print(f"  model        {args.model}  ({ckpt['arch'].upper()}, loss {ckpt.get('loss', '?')})")
+    print(f"  model        {args.model}  ({ckpt['arch'].upper()}, loss {ckpt.get('loss', '?')}, unroll {ckpt.get('unroll', 1)})")
     print(f"  data         {args.data}  ({len(up)} predicted steps{', SMOKE' if args.smoke else ''})")
     line("model", trip, errs)
     if base:

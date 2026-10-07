@@ -140,11 +140,11 @@ def main():
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     (out / "09_blindness.json").write_text(json.dumps(
         {"mach": args.mach, "c0": c0, "pad": args.pad, "segments": args.segments,
-         "model": str(args.model), "arch": ckpt["arch"], "loss": ckpt.get("loss"),
+         "model": str(args.model), "arch": ckpt["arch"], "loss": ckpt.get("loss"), "unroll": ckpt.get("unroll", 1),
          "smoke": args.smoke, "seed": args.seed, "variants": rows}, indent=2))
 
     print("\n" + "=" * 100)
-    print(f"SUMMARY  scripts/09_blindness.py  (M={args.mach}, {ckpt['arch'].upper()} {ckpt.get('loss', '')}"
+    print(f"SUMMARY  scripts/09_blindness.py  (M={args.mach}, {ckpt['arch'].upper()} {ckpt.get('loss', '')} unroll {ckpt.get('unroll', 1)}"
           f"{', SMOKE' if args.smoke else ''})")
     print(f"  {'variant':<15}{'steps':>6}{'field':>8}{'source':>9}{'B':>11}{'B_S':>11}"
           f"{'R/R0':>11}{'R_T/R_T0':>11}{'P/P0':>11}")

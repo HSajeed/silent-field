@@ -156,5 +156,5 @@ src/acoustics/tform.py     T-form cone share R_T (sub-dk included), radiated pow
 src/solvers/               2D NS (pseudospectral), vortex pair, IO
 src/models/                FNO, UNet, losses, vanilla training
 src/diagnostics/           spectra, spurious dilatation, the error triple
-tests/                     61 tests, all passing
+tests/                     64 tests, all passing
 ```

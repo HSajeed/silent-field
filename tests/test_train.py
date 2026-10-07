@@ -72,3 +72,27 @@ def test_rollout_feeds_predictions_back_and_stops_on_nonfinite():
             return x * (float("inf") if self.n == 3 else 2.0)
 
     assert predict_rollout(Blow(), x0, 5, TrainConfig(device="cpu")).shape[0] == 2
+
+
+def test_windows_match_pairs_and_unroll_one_equals_one_step():
+    import numpy as np
+    from src.models.train import make_pairs, make_windows
+    rng = np.random.default_rng(0)
+    u, v = rng.standard_normal((12, 8, 8)), rng.standard_normal((12, 8, 8))
+    xp, yp, sp = make_pairs(u, v)
+    xw, yw, sw = make_windows(u, v, 1)
+    assert sp == sw and torch.equal(xp, xw) and torch.equal(yp, yw[:, 0])
+    xw3, yw3, _ = make_windows(u, v, 3)
+    assert yw3.shape == (9, 3, 2, 8, 8) and torch.equal(yw3[:, 2], yp[2:])
+
+    x, y, cfg = _setup()
+    _, plain = train(_model(), x, y, cfg)
+    _, unrolled1 = train(_model(), x, y[:, None], cfg)
+    assert unrolled1 == plain
+
+
+def test_unrolled_training_runs_and_backprops_through_steps():
+    x, y, cfg = _setup()
+    y3 = torch.stack([y, 0.5 * y, 0.25 * y], dim=1)
+    _, hist = train(_model(), x, y3, cfg)
+    assert len(hist) == 4 and all(h["train"] > 0 for h in hist)
