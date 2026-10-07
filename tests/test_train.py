@@ -50,3 +50,25 @@ def test_resume_reproduces_an_uninterrupted_run():
         assert a["epoch"] == b["epoch"]
         assert abs(a["train"] - b["train"]) <= 1e-6 * abs(b["train"])
         assert abs(a["val"] - b["val"]) <= 1e-6 * abs(b["val"])
+
+
+def test_rollout_feeds_predictions_back_and_stops_on_nonfinite():
+    from src.models.train import predict_rollout
+
+    class Half(torch.nn.Module):
+        def forward(self, x):
+            return 0.5 * x
+
+    x0 = torch.ones(2, 4, 4)
+    out = predict_rollout(Half(), x0, 3, TrainConfig(device="cpu"))
+    assert out.shape == (3, 2, 4, 4)
+    assert abs(out[2].mean() - 0.125) < 1e-7
+
+    class Blow(torch.nn.Module):
+        def __init__(self):
+            super().__init__(); self.n = 0
+        def forward(self, x):
+            self.n += 1
+            return x * (float("inf") if self.n == 3 else 2.0)
+
+    assert predict_rollout(Blow(), x0, 5, TrainConfig(device="cpu")).shape[0] == 2

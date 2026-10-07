@@ -51,8 +51,12 @@ def _segments(nt: int, n_segments: int, overlap: float = 0.5):
     return [(s, s + seg) for s in range(0, nt - seg + 1, step)]
 
 
-def _stress_spectrum(u, v, grid: Grid, window: str = "hann", taper_alpha: float = 0.0):
+def _stress_spectrum(u, v, grid: Grid, window: str = "hann", taper_alpha: float = 0.0,
+                     minus=None):
     """Time transform of the dealiased stress of one segment.
+
+    minus : optional (u2, v2); the stress is then u_i u_j - u2_i u2_j, e.g. the stress
+            error of a prediction, for the source-side blindness ratio B_S.
 
     Returns (T_hat dict of (n_pos, n, n) complex, omega, fold, norm, s_total): `fold`
     doubles the interior positive frequencies, `norm` is komega's
@@ -69,6 +73,10 @@ def _stress_spectrum(u, v, grid: Grid, window: str = "hann", taper_alpha: float 
     s_hat = 0.0
     for key, (a, b) in {"uu": (u, u), "uv": (u, v), "vv": (v, v)}.items():
         t = np.stack([dealias(a[i].astype(np.float64) * b[i], grid) for i in range(nt)])
+        if minus is not None:
+            a2, b2 = {"uu": (minus[0], minus[0]), "uv": (minus[0], minus[1]),
+                      "vv": (minus[1], minus[1])}[key]
+            t -= np.stack([dealias(a2[i].astype(np.float64) * b2[i], grid) for i in range(nt)])
         t -= t.mean(axis=0, keepdims=True)
         s_hat = s_hat - kk[key] * np.fft.fft2(t)
         t *= w[:, None, None] * tap
@@ -99,12 +107,15 @@ def cone_share_refined(
     pad: int = 4,
     n_segments: int = 4,
     taper_alpha: float = 0.5,
+    minus=None,
 ) -> dict:
     """Cone share of S~ = -k_i k_j T~_ij on a `pad`-times refined wavenumber grid.
 
     The denominator is the total power of S under the same window, segmentation and
     taper -- with taper_alpha = 0 that is `welch_komega_spectrum(S).power_resolved.sum()`,
     R_S's denominator.
+
+    minus : optional (u2, v2) subtracted at the stress level (see `_stress_spectrum`).
 
     Returns {"share": [per c0], "share_sub_dk": [per c0]}: the second is the part with
     0 < |k| < dk, which the periodic grid cannot hold at all.  With pad = 1 the share is
@@ -119,8 +130,9 @@ def cone_share_refined(
     sub = np.zeros(c0s.size)
     s_total = 0.0
     for lo, hi in segs:
+        m = None if minus is None else (minus[0][lo:hi], minus[1][lo:hi])
         T, om_idx, fold, norm, s_seg = _stress_spectrum(u[lo:hi], v[lo:hi], grid,
-                                                        taper_alpha=taper_alpha)
+                                                        taper_alpha=taper_alpha, minus=m)
         s_total += s_seg
         omega = om_idx / dt
         # cone edge, clipped to the box's resolved band [-n/2, n/2) per axis
@@ -157,6 +169,7 @@ def radiated_power(
     n_theta: int = 64,
     n_segments: int = 4,
     taper_alpha: float = 0.5,
+    minus=None,
 ) -> dict:
     """Far-field acoustic power of the stress, per c0, up to a c0-independent constant.
 
@@ -177,8 +190,9 @@ def radiated_power(
     compact = np.zeros(c0s.size)
     x = grid.x
     for lo, hi in segs:
+        m = None if minus is None else (minus[0][lo:hi], minus[1][lo:hi])
         T, om_idx, fold, norm, _ = _stress_spectrum(u[lo:hi], v[lo:hi], grid,
-                                                    taper_alpha=taper_alpha)
+                                                    taper_alpha=taper_alpha, minus=m)
         omega = om_idx / dt
         # box integrals (k = 0), shape (n_pos,)
         T0 = {key: a.sum(axis=(1, 2)) for key, a in T.items()}
