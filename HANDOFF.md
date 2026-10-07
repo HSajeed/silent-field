@@ -217,14 +217,28 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    (normalised). Teacher-forced `03` at M=0.1: field 3.04%, source 28.60%, **far field
    (T-form) |p| 2.02%, complex 2.71%** (22 freqs, ω 0.154–78.5, 14 below c0·dk, 49% of the
    stress's ω>0 power); div(u) error 0.182 (truth 9.2e-07); dilatational energy 5.35e-05.
-   **The far-field error is smaller than the field error — not blindness on this metric.**
-   Not yet understood. Candidate reasons, none checked: (a) teacher forcing re-anchors every
-   step to the truth, so large-scale/low-ω content (the compact term, which dominates the
-   T-form far field) is inherited from the input; (b) `relative_l2` over the band is
-   energy-weighted, dominated by the strongest low-ω bins; for contrast, 5% white velocity
-   noise gave 27% (smoke test). Next, before any claim: per-frequency far-field error
-   (above vs below c0·dk), the free-rollout control, B/B_S and the matched-random-error
-   control (review §4.2), then UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
+   **Copy-the-input baseline** (predict t+1 = t; same metrics, local) and the box-mode band
+   (`--band-mode k`, ω ≥ c0·dk = 11.3, 0.28% of the stress power; `runs/fno_mse_01/band_k/`):
+
+   | error | FNO | copy input | FNO gain |
+   |---|---|---|---|
+   | field | 3.04% | 9.63% | 3.2× |
+   | Lighthill source | 28.60% | 31.55% | **1.1×** |
+   | far field \|p\|, ω band | 2.02% | 0.20% | 0.1× |
+   | far field complex, ω band | 2.71% | 18.90% | 7.0× |
+   | far field \|p\|, k band | 11.43% | 0.13% | 0.01× |
+   | far field complex, k band | 15.47% | 52.62% | 3.4× |
+
+   Readings: (1) **\|p\| is not a usable far-field metric** — magnitudes ignore timing, so
+   doing nothing scores best; report the complex error. (2) The ω-band far field is
+   dominated by the low-ω compact term, which teacher forcing nearly hands to the model.
+   (3) In the box-mode radiating band the complex error is 15.5%, **5× the field error**,
+   but the FNO's gain over copying there (3.4×) equals its gain on the field (3.2×): harder,
+   not selectively neglected — no B-type evidence yet. (4) **Training improves the source
+   only 1.1× over copying** while improving the field 3.2×: the clearest support so far,
+   at source level. Next: make `03` report complex error + the copy baseline by default;
+   per-frequency error; free-rollout control; B/B_S + matched random error (review §4.2);
+   UNet. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
