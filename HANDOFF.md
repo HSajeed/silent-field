@@ -191,6 +191,7 @@ python -m pytest -q                                                # 61 passed
 python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # Stage 3 (GPU); --smoke for a quick check
 python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01
 python scripts/09_blindness.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01      # B, B_S + controls
+python scripts/10_error_diagnostic.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01/diag   # jitter vs aliasing
 python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --out <path>
 ```
 
@@ -268,7 +269,13 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
      (it is ~1% of a 3% error), yet it puts spurious supersonic content into the prediction
      (R 6× truth teacher-forced, 35× in rollout) and spurious high-frequency sound. Total
      radiated power stays right (compact, low-ω term). Next: UNet, Sobolev (standard H¹),
-     multi-step loss; test whether a temporal-derivative/multi-step objective lowers B. For any trained Stage-4 run use the standard multiplicative H¹ loss
+     multi-step loss; test whether a temporal-derivative/multi-step objective lowers B.
+   **Built (smoke-tested):** `scripts/10_error_diagnostic.py` — (k, ω) error map, per-|k|-shell
+   lag-1 temporal correlation of error vs truth, error share in the cone-k range and in the
+   aliasing band (|k| > 2/3 k_max), low-k ω-spectrum of error vs truth; model vs copy-input.
+   `09` variants renamed `model_tf`/`model_rollout` (the fno_mse_01 JSON still says `fno_*`).
+   Plan agreed 2026-10-07: run `10` on FNO + train/evaluate UNet; then FNO with standard H¹ and
+   with an unrolled multi-step loss; later noise injection / PDE-Refiner. For any trained Stage-4 run use the standard multiplicative H¹ loss
    (neuraloperator `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
 8. **Notebooks: chapter refresh for 2026-10-07 changes — see notebooks/README.md.**
 
