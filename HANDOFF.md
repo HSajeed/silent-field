@@ -16,11 +16,13 @@ Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under
 (`stage3_log.md`).
 
 ## Resume here (end of session 2026-10-07)
-1. **Collect the pending Mach sweeps** (Mach is an analysis knob; no retraining). The user
-   ran `unet_mse_01` (done, logged); `fno_h1_01` and `fno_mse_unroll4` remain (in RunStage3
-   change only the `RUN = ...` line). Read outputs with colab-mcp `get_cells(includeOutputs=true)`;
-   results also land on Drive (`runs/<run>/09_blindness_machs.json`, `runs/<run>/machs/`).
-   Then add them to `stage3_log.md` (Mach-sweep section) and summarise here (open item 7).
+1. ~~Collect the pending Mach sweeps~~ **Done 2026-10-07 (second session):** all four non-seed runs
+   (`fno_mse_01`, `unet_mse_01`, `fno_h1_01`, `fno_mse_unroll4`) are logged in `stage3_log.md`
+   ("Mach sweep"). The sweeps ran in a notebook that was blank on connect (not RunStage3); fine,
+   the runner cell is self-contained. Results on Drive `runs/<run>/09_blindness_machs.json`, `machs/`.
+   **Next, agreed in discussion:** train FNO-MSE + FNO-H¹ (2–3 seeds) on `data/turb2d_kf16.npz`
+   (exists; only truth metrics done) to test whether the objective ordering holds on a second flow,
+   then experiment 5. Not yet started.
 2. **Decide experiment 5.** Candidates: noise-injection training; PDE-Refiner-style refinement;
    the project's open question — a loss weighted by proximity to the sonic line over a time
    window (the evidence so far says the lever is weighting in ω, not unrolling or H¹).
@@ -243,9 +245,12 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
    - **Standard H¹ makes it ~20× worse** (B 1.1e5, high-ω far field 3–4×). **Unrolling ×4
      does not fix it** (B −21%, just below seed spread; high-ω excess worse). Interpretation:
      any amplitude-weighted loss leaves the jitter invisible; a fix must reweight in ω.
-   - **Mach:** B falls ~M⁻⁵–M⁻⁶ (FNO 1.2e6 → 29, UNet 5.3e5 → 38 from M=0.05 to 0.3);
-     radiating-band far-field error FNO 218% → 3.9%, UNet 120% → 2.6% — worse than copying at
-     M=0.05 for both. Blindness is a low-Mach effect in both architectures; B_S stays 5–11.
+   - **Mach (all four runs swept):** B falls ~M⁻⁵–M⁻⁶ (FNO 1.2e6 → 29, UNet 5.3e5 → 38, unroll4
+     1.1e6 → 22, H¹ 2.5e7 → 671 from M=0.05 to 0.3); radiating-band far-field error FNO 218% → 3.9%,
+     UNet 120% → 2.6%, unroll4 241% → 4.4%, H¹ 635% → 11.3% — worse than copying (107%) at M=0.05 for
+     all. The objective ordering (H¹ is 21–26× FNO-MSE in B; unroll4 −9…−23%, UNet ≈ MSE) holds at
+     every Mach. B_S falls ≤3× (not flat). The Mach trend is partly geometric (cone widens), so it
+     is a property of the metric as much as of the networks. Still one dataset.
    - Rollout metrics are seed-dominated (radiated power 0.49–1.11 across seeds): never rank
      models on one rollout.
    For any trained Stage-4 run use the standard multiplicative H¹ loss (neuraloperator
