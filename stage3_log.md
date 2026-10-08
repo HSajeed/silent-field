@@ -402,3 +402,104 @@ proxy (summed over a k range); the cone-trained M* values are extrapolated below
 moves M*_obs(copy) only from ~0.067 to ~0.047 / 0.042 despite B falling 57–220× — i.e. it shifts
 the failure Mach by ~1.4–1.6×, not by orders of magnitude [computed from the table]. The 100%
 definition is more stable for kf16 H¹ (0.085–0.088) than the vs-copy one (0.18–0.22).
+
+## Experiment 5 — additional numbers read from Drive (2026-10-08 review; JSONs read directly, nothing re-run)
+
+Radiating-band far field (complex error above c0·dk, teacher-forced) by Mach, from each run's
+`03_errors.json` `far_field_by_mach`:
+
+| M | FNO MSE s0 | cone λ=1e2 | λ=1e3 | λ=1e4 | copy-input |
+|---|---|---|---|---|---|
+| 0.05 | 217.5% | 172.4% | 94.2% | 82.9% | 106.5% |
+| 0.1 | 19.0% | 17.2% | 13.0% | 15.5% | 52.2% |
+| 0.2 | 5.0% | 5.0% | 4.7% | 5.5% | 33.4% |
+| 0.3 | 3.9% | 3.9% | 3.5% | 4.5% | 27.7% |
+
+Compact part (below c0·dk) at M=0.1: MSE 0.86% → λ=1e2 1.43%, λ=1e3 1.62%, λ=1e4 2.40% (the cone loss
+roughly doubles the error on the term that carries most of the radiated power; not in the pre-registered criteria).
+
+Per-frequency far field at M=0.1, top of the band (model | copy): ω=34.9: MSE 263%, λ=1e3 136%, λ=1e4 107% |
+128%; ω=59.9: 678 / 295 / 232% | 186%; ω=78.5: 684 / 390 / 280% | 200%. No cone run beats copying at the two
+highest frequencies. The aggregate "above c0·dk" number is power-weighted (dominated by ω≈12–15), so it hides
+this — the far-field aggregate is amplitude-blind in the same way L2 is.
+
+Low-k ω spectra (`10`, summed over |k| ≤ 6.93, M=0.1): truth PSD 0.19 at ω=0.38 → 1.2e-7 at 19.2 → 7.8e-16
+at 78.3. Error/truth: MSE 1.5e-5 / 0.35 / 2.3e4, λ=1e3 9e-6 / 0.09 / 2.1e3 at ω = 0.38 / 19.2 / 78.3. The
+cone loss lowers the high-ω low-k error ~10× above ω≈35, ~4× at ω≈19, ~nothing below ω≈12 — i.e. exactly
+the trained cone. Error = truth at ω≈21.7 (MSE) and ≈30.5 (λ=1e3): a 10× lower floor moves the crossover
+only 1.4× because truth falls ~ω^-14 and error ~ω^-6 (see the crossover section). Earlier wording "near-white
+jitter" is superseded: the error spectrum decays, just ~8 powers of ω slower than the truth.
+
+Cone share relative to the matched-white control, B/B_white (the truth's cone share cancels):
+FNO MSE s0 0.030 / 0.050 / 0.060 / 0.065 at M = 0.05 / 0.1 / 0.2 / 0.3 while B spans 4×10⁴; kf16 MSE s0
+0.027 / 0.038 / 0.041 / 0.042; UNet 0.013 / 0.041 / 0.074 / 0.084; H¹ 0.60 / 1.13 / 1.58 / 1.49; λ=1e3
+4.2e-4 / 8.7e-4 / 7.7e-3 / 0.015. The "B ∝ M⁻⁶" Mach trend is the truth's cone share, not the networks.
+
+Free rollout by Mach (`09_blindness_machs.json`, model_rollout): λ=1e3 P/P0 28.8 / 30.0 / 31.4 / 33.3,
+R_T ratio 32.6 / 28.9 / 23.7 / 20.6, velocity R ratio 1.8e4 / 89 / 8.8 / 3.8; FNO MSE s0 P/P0 0.75–0.80,
+R_T ratio 1.82 / 1.75 / 1.33 / 1.00, velocity R ratio 4.4e3 / 35 / 3.3 / 1.3. MSE rollouts carry spurious
+velocity-cone content that does not radiate (R_T, P stay ≈ truth): velocity B is a proxy, B_S/far field are
+the acoustic quantities. Rollout field error 136% (MSE) ≈ √(1+a²) with a≈0.93 (decorrelated, same energy);
+238% (λ=1e3) and 309% (λ=1e4) give a≈2.2 and 2.9, i.e. the cone rollouts settle at ~5–9× the energy
+[interpretation: under-dissipative drift, not divergence; the excess sits at high ω in the lowest shells, so a
+slow large-scale condensate is the less likely picture; needs E(|k|≤2, t) and its ω-spectrum].
+
+kf16 pass criterion 4 (radiating band worse than copying at M=0.05), seeds 1–2 now read: s1 105.9%, s2 102.8%
+vs copy 82.3% (s0 113.0%) — passes for all three seeds.
+
+Open confound (unchanged): every cone run trains in window mode (batch = 32 consecutive frames, 62
+windows/epoch, different validation split) and is compared with pair-mode MSE. A λ=0 window-mode run is needed
+before the val-MSE drop (2.2e-3 → 1.5e-3), the "no field cost" claim, or the rollout trend can be attributed to
+the cone term.
+
+## Crossover analysis — addendum (2026-10-08 review: 100% criterion as primary)
+
+Recomputed from `analysis/11_crossover/11_crossover.json` (first run of `scripts/11`, summed-low-k ω_x).
+The vs-copy criterion is ill-conditioned when model and copy errors run nearly parallel in Mach (kf16 H¹:
+obs/pred 2.5–3.0×); the 100% criterion (Mach where the radiating-band far-field error reaches 100%) is primary.
+
+| run | ω_x | M*_pred = U·dk/ω_x | M*_obs(100%) | obs/pred |
+|---|---|---|---|---|
+| FNO MSE s0 (s1, s2) | 21.7 (21.6, 20.8) | 0.052 (0.052, 0.054) | 0.062 | 1.20 |
+| FNO MSE unroll4 | 21.1 | 0.054 | 0.064 | 1.20 |
+| UNet MSE | 30.6 | 0.037 | 0.053 | 1.43 |
+| FNO H¹ | 16.6 | 0.068 | 0.086 | 1.27 |
+| cone λ=1e2 / 1e3 / 1e4 | 23.5 / 30.5 / 34.9 | 0.048 / 0.037 / 0.032 | 0.059 / 0.049* / 0.046* | 1.22 / 1.32 / 1.43 |
+| kf16 MSE s0 / s1 / s2 | 18.5 / 18.5 / 18.5 | 0.043 | 0.053 / 0.051 / 0.051 | 1.24 / 1.20 / 1.19 |
+| kf16 H¹ s0 / s1 | 13.7 / 13.6 | 0.058 | 0.088 / 0.085 | 1.52 / 1.47 |
+
+\* extrapolated below M=0.05.
+
+- **[computed]** 12 runs: log-log Pearson 0.920, Spearman 0.902, fitted slope 0.97; obs/pred median 1.25, range
+  1.19–1.52. Interpolated-only (n=10): Pearson 0.909. Baseline flow only (n=7): Pearson 0.972.
+- **Cross-flow test [computed]:** calibrating the constant on the baseline runs only (median 1.27) and
+  predicting kf16: MSE seeds +2%, +5%, +7% error; H¹ seeds −17%, −14%. kf16 has the lower ω_x (18.5 vs 21.7)
+  yet the lower M*, because its U is smaller (0.79 vs 1.13); the U·dk/ω_x form gets the ordering right.
+- **Null predictors [computed]:** field error vs M*_obs Pearson 0.26 (cone λ=1e3 and H¹ have the same 3.2% field
+  error, M* differ 1.8×). B at M=0.1 (baseline, n=7) is rank-correlated (Pearson 0.91 in log) but with
+  d ln M*/d ln B = 0.066: B spans ~5000× for a 1.9× change in M*.
+- **Seed spread of ω_x is small** (20.8–21.7 baseline, 18.45–18.52 kf16): the crossover is a property of the
+  model/objective, not run noise.
+- **Diminishing returns [computed]:** MSE → cone λ=1e4 moves M*_obs 0.062 → 0.046 (1.35×) while B falls 220×.
+  With power-law spectra ω_x = (A/B)^(1/(p−q)), p−q ≈ 7–8, so a 10× lower floor buys ≈1.35× in M*.
+- **UNet revises an earlier reading:** same B as the FNO, but ω_x = 30.6 (= cone λ=1e3) and M*_obs 0.053, with a
+  stable rollout (P/P0 0.69–0.81). "It is the objective, not the architecture" holds for B, not for the
+  quantity that sets M*. One UNet seed — replicate before relying on it.
+- **Bias is not constant:** 1.19–1.24 for MSE runs, 1.3–1.5 for runs whose M*_obs sits at/below 0.05 (UNet,
+  cone 1e3/1e4, kf16 H¹), exactly where M*_obs comes from coarse 0.05–0.1 interpolation or extrapolation.
+  Mach grid vs physics not yet separable.
+- **Independence:** prediction and observation use the same model outputs through different pipelines
+  (velocity ω-spectrum at M=0.1 vs T-form far field at four Machs). The parameter-free calibration and the
+  cross-flow U scaling are what make the agreement non-trivial; say so explicitly in any write-up.
+
+**Code changes (2026-10-08, not yet run):** `scripts/10` now also saves `U`, `dk`, `shells_k` and per-shell
+ω-PSDs (`psd_shell_truth`, model/copy `psd_shell_error`) for the lowest `--n-shells` (default 4) nonzero |k|.
+`scripts/11` predicts from the |k|=dk shell when those exist (M* = U·|k|/ω_x(|k|), per shell and max over shells),
+falls back to the summed proxy otherwise, uses the 100% criterion as primary, prints per-dataset and
+leave-one-dataset-out calibration, writes `11_crossover_summary.json`, and plots predicted vs observed with the
+median calibration line. Existing `10` outputs lack the shell fields; re-run `10` to use them.
+
+**Next (priority):** (1) `03 --extra-machs 0.03 0.035 0.04 0.06 0.07 0.08` on all 12 runs (analysis only) to
+remove extrapolation; (2) re-run `10` (shell spectra) and `11`; (3) UNet seeds 1–2 and UNet on kf16;
+(4) λ=0 window-mode control; (5) whitened (truth-PSD-normalised) cone loss; (6) noise-injection baseline;
+(7) rollout E(|k|≤2, t) diagnostic.
