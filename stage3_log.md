@@ -368,3 +368,37 @@ Reading (interpretation unless stated):
   [mechanism unknown; not tested].
 - Limits: one seed per λ, one dataset (kf16 not yet run), window W=16 variant not yet run, training Mach
   0.05 variant not run, MSE comparison is to the baseline seeds (no matched-seed cone runs).
+
+## Error-floor crossover vs observed M* (`scripts/11_crossover.py`, run 2026-10-08 on a Colab CPU runtime)
+
+Hypothesis in the script's docstring (2026-10-08 review): at low |k| the true temporal spectrum falls
+far faster in ω than a trained surrogate's error, so error exceeds signal above a crossover ω_x, and
+the whole lowest-shell radiating band (ω ≥ U·dk/M) lies above ω_x once M ≤ M*_pred = U·dk/ω_x.
+Compared with M*_obs from `03` (Mach where the model's far-field error above c0·dk equals the
+copy-input error). Inputs: `10`/`03 --extra-machs`/`09` JSONs of all runs; outputs
+`MyDrive/silent-field/analysis/11_crossover/11_crossover.{json,png}`. Script caveats: the low-k PSD
+is summed over |k| ≤ ω_max/c0 at M=0.1 (not the dk shell alone), so ω_x is a proxy; M*_obs below
+the lowest evaluated Mach (0.05) is extrapolated (tag `extrapolated_below`: cone λ=1e3, 1e4).
+
+- **Slopes (fit over the top of the ω band) [computed]:** truth spectrum −14.2 (baseline), −13.7
+  (kf16); error spectra −5.3 to −7.9 (MSE −6.2 baseline / −7.7…−7.9 kf16; H¹ −5.3 / −7.4…−7.5; cone
+  −6.1 / −6.5 / −7.6 for λ=1e2 / 1e3 / 1e4). The truth falls ~8 powers of ω faster than every error.
+- **ω_x (error PSD = truth PSD):** MSE 20.8–21.7 (baseline), 18.5 (kf16); UNet 30.6; unroll4 21.1;
+  H¹ 16.6 / 13.6–13.7; cone 23.5 / 30.5 / 34.9 (λ=1e2 / 1e3 / 1e4).
+- **Prediction vs observation, 12 runs with a Mach-swept `03`:** log-log correlation of M*_pred and
+  M*_obs(copy) = 0.797; obs/pred median 1.41, range 1.26–3.82. Against M*_obs(100%) (the Mach where
+  the radiating-band far-field error reaches 100%) the ratio from the printed table is 1.18–1.52
+  [computed by hand from the table]: the prediction is systematically ~20–50% too low.
+- Examples (M*_pred → M*_obs(copy)): MSE baseline 0.052 → 0.067; kf16 MSE 0.043 → 0.060–0.064; H¹
+  0.068 → 0.113 (baseline), 0.058 → 0.18–0.22 (kf16); cone λ=1e2 0.048 → 0.062, λ=1e3 0.037 → 0.047
+  (extrapolated), λ=1e4 0.032 → 0.042 (extrapolated).
+
+Reading (interpretation): the crossover mechanism has the right sign and ordering — it gives a
+falsifiable M* of 0.03–0.07 for the evaluated runs and ranks the loss families correctly (H¹ highest,
+cone lowest) — which turns "blindness gets worse at low Mach" from a statement about the metric into a
+statement about two spectra. Limits: 12 runs are not independent (two datasets, repeated seeds) and
+the correlation is largely between loss families; there is a consistent 1.2–1.5× bias and ω_x is a
+proxy (summed over a k range); the cone-trained M* values are extrapolated below M=0.05. The cone loss
+moves M*_obs(copy) only from ~0.067 to ~0.047 / 0.042 despite B falling 57–220× — i.e. it shifts
+the failure Mach by ~1.4–1.6×, not by orders of magnitude [computed from the table]. The 100%
+definition is more stable for kf16 H¹ (0.085–0.088) than the vs-copy one (0.18–0.22).
