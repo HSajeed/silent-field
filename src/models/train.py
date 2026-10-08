@@ -3,6 +3,8 @@
 Do not improve this. The claim is that the *standard* recipe is structurally
 blind to the acoustics, so any cleverness here weakens the result. One-step MSE,
 Adam, cosine schedule -- exactly what every paper in this space does.
+`loss='cone'` (Experiment 5) is a deliberate departure from that recipe, not
+part of the baseline claim.
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from .losses import mse_loss, sobolev_loss, h1_loss
+from .losses import mse_loss, sobolev_loss, h1_loss, cone_window_loss
 
 
 @dataclass
@@ -21,7 +23,7 @@ class TrainConfig:
     batch_size: int = 16
     lr: float = 1e-3
     weight_decay: float = 1e-5
-    loss: str = "mse"            # 'mse' | 'sobolev' | 'h1'
+    loss: str = "mse"            # 'mse' | 'sobolev' | 'h1' | 'cone'
     unroll: int = 1              # >1: backprop through this many autoregressive steps
     sobolev_order: int = 1
     sobolev_weight: float = 1e-2
@@ -29,6 +31,11 @@ class TrainConfig:
     val_fraction: float = 0.15
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     seed: int = 0
+    cone_lambda: float = 1e3     # Experiment 5: weight of the cone term, mse-scale units
+    cone_mach: float = 0.1       # analysis Mach number used to derive cone_c0 (record-keeping)
+    cone_window: int = 16        # teacher-forced window length W (record-keeping; W = x.shape[1])
+    cone_c0: float = 11.31       # sound speed used by the cone mask: sound_speed(u_rms, cone_mach)
+    cone_dt: float = 0.04        # seconds between consecutive frames (dataset's dt_save)
 
 
 def make_pairs(u, v, normalise=True):
@@ -67,6 +74,46 @@ def make_windows(u, v, steps, normalise=True):
             torch.tensor(y, dtype=torch.float32), stats)
 
 
+def make_tf_windows(u, v, W, stride, normalise=True):
+    """(nt, n, n) histories -> teacher-forced windows x=(Nw, W, 2, n, n) (frames
+    t..t+W-1) and y=(Nw, W, 2, n, n) (frames t+1..t+W), one window starting every
+    `stride` frames.  Each y[:, j] is the true next frame of x[:, j] -- there is no
+    rollout and no graph through time; a model applied frame-by-frame to x reproduces
+    one-step teacher-forced prediction for every frame in the window at once.
+
+    Normalised exactly as `make_pairs` (same statistics, computed over u[:-1], v[:-1]),
+    so cone runs are comparable to the other losses.
+    """
+    f = np.stack([u, v], axis=1)                      # (nt, 2, n, n)
+    stats = {"mean": 0.0, "std": 1.0}
+    if normalise:
+        stats = {"mean": float(f[:-1].mean()), "std": float(f[:-1].std()) or 1.0}
+        f = (f - stats["mean"]) / stats["std"]
+    nt = len(f)
+    starts = list(range(0, nt - W, stride))
+    x = np.stack([f[t:t + W] for t in starts], axis=0)
+    y = np.stack([f[t + 1:t + 1 + W] for t in starts], axis=0)
+    return (torch.tensor(x, dtype=torch.float32),
+            torch.tensor(y, dtype=torch.float32), stats)
+
+
+def _infer_window_stride(x, w):
+    """Recover the stride `make_tf_windows` used, from the windows themselves.
+
+    Windows are equally spaced, deterministic slices of one time series, so the
+    overlap between consecutive windows is exact: the smallest shift `s` for which
+    x[0][s:] == x[1][:w-s] is the stride.  Used only to find the train/val boundary
+    that avoids leaking frames between the two splits.
+    """
+    if len(x) < 2:
+        return w
+    first, nxt = x[0], x[1]
+    for s in range(1, w):
+        if torch.equal(first[s:], nxt[:w - s]):
+            return s
+    return w
+
+
 def denormalise(arr, stats):
     return arr * stats["std"] + stats["mean"]
 
@@ -81,7 +128,15 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
     """
     torch.manual_seed(cfg.seed)
     n_val = max(1, int(len(x) * cfg.val_fraction))
-    xt, yt, xv, yv = x[:-n_val], y[:-n_val], x[-n_val:], y[-n_val:]
+    if x.ndim == 5:                                  # teacher-forced windows (cone): drop
+        split = len(x) - n_val                        # train windows that overlap the val region
+        stride = _infer_window_stride(x, x.shape[1])
+        train_end = split
+        while train_end > 0 and (train_end - 1) * stride + x.shape[1] > split * stride:
+            train_end -= 1
+        xt, yt, xv, yv = x[:train_end], y[:train_end], x[split:], y[split:]
+    else:
+        xt, yt, xv, yv = x[:-n_val], y[:-n_val], x[-n_val:], y[-n_val:]
 
     loader = DataLoader(TensorDataset(xt, yt), batch_size=cfg.batch_size, shuffle=True)
     model = model.to(cfg.device)
@@ -102,9 +157,16 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
             return sobolev_loss(p, t, cfg.sobolev_order, cfg.sobolev_weight, cfg.domain_length)
         if cfg.loss == "h1":
             return h1_loss(p, t, cfg.domain_length)
+        if cfg.loss == "cone":
+            return mse_loss(p, t) + cfg.cone_lambda * cone_window_loss(
+                p - t, cfg.cone_dt, cfg.domain_length, cfg.cone_c0)
         raise ValueError(cfg.loss)
 
     def step_loss(xb, yb):
+        if xb.ndim == 5:                             # teacher-forced windows (Experiment 5)
+            b, w = xb.shape[0], xb.shape[1]
+            p = model(xb.reshape(b * w, *xb.shape[2:])).reshape(b, w, *xb.shape[2:])
+            return criterion(p, yb)
         if yb.ndim == 4:                             # one-step pairs
             return criterion(model(xb), yb)
         # unrolled: feed predictions back, keep the graph, average over the steps
@@ -127,10 +189,21 @@ def train(model, x, y, cfg: TrainConfig, on_epoch_end=None, resume=None):
         sched.step()
 
         model.eval()
+        extra = {}
         with torch.no_grad():
-            yv1 = yv if yv.ndim == 4 else yv[:, 0]       # one-step MSE: comparable across runs
-            val = mse_loss(model(xv.to(cfg.device)), yv1.to(cfg.device)).item()
-        history.append({"epoch": epoch, "train": running / len(xt), "val": val})
+            if xv.ndim == 5:                         # window mode: chunked one-step MSE + cone
+                bv, wv = xv.shape[0], xv.shape[1]
+                flat_x = xv.reshape(bv * wv, *xv.shape[2:])
+                preds = [model(flat_x[i:i + 8].to(cfg.device)) for i in range(0, len(flat_x), 8)]
+                pred = torch.cat(preds, dim=0).reshape(bv, wv, *xv.shape[2:])
+                yv_dev = yv.to(cfg.device)
+                val = mse_loss(pred, yv_dev).item()
+                extra["val_cone"] = cone_window_loss(
+                    pred - yv_dev, cfg.cone_dt, cfg.domain_length, cfg.cone_c0).item()
+            else:
+                yv1 = yv if yv.ndim == 4 else yv[:, 0]   # one-step MSE: comparable across runs
+                val = mse_loss(model(xv.to(cfg.device)), yv1.to(cfg.device)).item()
+        history.append({"epoch": epoch, "train": running / len(xt), "val": val, **extra})
         if epoch % max(1, cfg.epochs // 10) == 0:
             print(f"  epoch {epoch:3d}  train {running/len(xt):.3e}  val {val:.3e}")
         if on_epoch_end is not None:
