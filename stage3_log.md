@@ -254,8 +254,8 @@ absolute B (truth cone share differs: R_T 3.0e-9 kf16 vs 4.9e-9 baseline at M=0.
 | `kf16_fno_mse_s0` | complete (03, 09 --machs, 10) | 6.56e-3 / 5.31e-3 |
 | `kf16_fno_mse_s1` | complete | 6.32e-3 / 5.17e-3 |
 | `kf16_fno_mse_s2` | complete | 6.57e-3 / 5.32e-3 |
-| `kf16_fno_h1_s0` | trained, `03` done; **`09`, `10` not run** (Colab usage limit) | 1.68e-2 / 5.65e-3 |
-| `kf16_fno_h1_s1` | **not started** | — |
+| `kf16_fno_h1_s0` | complete (03, 09 --machs, 10; the `09`/`10` ran in a second session after a Colab usage-limit stop) | 1.68e-2 / 5.65e-3 |
+| `kf16_fno_h1_s1` | complete | 1.64e-2 / 5.47e-3 |
 
 FNO overfits on kf16: val bottoms at epoch ~12 and rises (baseline val 2.2e-3, no rise); field
 error 5.3% vs 3.0%. Same recipe, so the comparison is unaffected, but absolute errors are higher.
@@ -277,20 +277,29 @@ c0·dk, s0 (model | copy): 113% | 82.3% at M=0.05, 24.6 | 43.1 at 0.1, 9.6 | 29.
 Rollout metrics vary by seed again (M=0.1: R/R0 62 / 60 / 79; R_T ratio 5.5 / 8.4 / 21.5; P/P0
 1.36 / 1.12 / 1.55).
 
-**H¹ seed 0, `03` only (M=0.1):** field 5.66%, source 33.25%, far field complex 22.39% (below 5.63%,
-above 76.67%) — vs MSE above-c0·dk 22.8–25.4% (≈3.1×; baseline 60.6 vs 19.0% = 3.2×). Its B is not measured.
+**H¹ (seeds 0 / 1), teacher-forced, vs the MSE mean of the three seeds:**
 
-Criteria status:
-1. **Pass.** B(M=0.1) spread 4% across 3 seeds (baseline ±9%).
-2. **Open** — needs `09` on `kf16_fno_h1_s0`. Far-field result above is consistent with the baseline.
-3. **Pass.** B ≈ 3.7% of the matched-white value (baseline ~5%), 220× the copy value.
-4. **Pass for s0** (113% vs 82.3%); s1/s2 are in their `03_errors.json` (`far_field_by_mach`), not read.
+| measure (M=0.1) | H¹ s0 | H¹ s1 | MSE s0/s1/s2 |
+|---|---|---|---|
+| field / source error | 5.66 / 33.25% | 5.63 / 32.68% | 5.30–5.34 / 28.9–29.4% |
+| far field complex above c0·dk | 76.67% | 68.00% | 24.63 / 25.35 / 22.79% |
+| B | 4.28e4 | 4.63e4 | 1.75 / 1.69 / 1.68e3 (mean 1.71e3) |
+| B_S | 165 | 187 | 17.7 / 16.2 / 16.3 |
+| low-k error ÷ truth, high ω | 3940 | 5140 | 279 / 265 / 270 |
+
+B by Mach (M = 0.05 / 0.1 / 0.2 / 0.3): s0 2.69e6 / 4.28e4 / 4.06e3 / 1.05e3; s1 2.95e6 / 4.63e4 / 4.23e3 /
+1.11e3. Ratio to the MSE mean (1.36e5 / 1.71e3 / 155 / 46.2): s0 19.7 / 25.1 / 26.2 / 22.7×, s1 21.6 / 27.1 /
+27.3 / 24.0× (baseline flow: 21 / 23 / 26 / 23×). H¹ B at M ≥ 0.1 equals or exceeds the matched-white
+control (4.63e4 at M=0.1). Seed spread of H¹ B at M=0.1: 8%. Free rollout is unstable under H¹ here
+(s0: field error ~1e37%, P/P0 ~1e131; s1: field error 270%, source 7458%, P/P0 1e4) — much worse than the
+baseline H¹ rollout (P/P0 2.4); rollout is seed-dominated, so this is only "unstable", not a magnitude.
 
 Reading (interpretation): the baseline pattern reproduces on a second flow for MSE — the same
 position between the controls, tight seed spread, the same jitter fingerprint (low-k error ÷ truth
 at high ω 265–279 vs 191–226 on the baseline), the same low-Mach failure. Differences: B_S is ~1.8×
 higher (16–18 vs 9), and B falls with Mach by a similar factor (~M⁻⁵·⁹, 1.4e5 → 46). The H¹
-comparison is not complete: **do not cite criterion 2 as met**. To finish: `09` (and `10`) on
-`kf16_fno_h1_s0` (training resumes from `last.pt`, so the cell re-trains nothing), then `kf16_fno_h1_s1`
-in full; ~30 min of T4. Notes: the run-1 cell was accidentally re-executed once (evaluation only,
+H¹ comparison is now complete: 3 MSE seeds + 2 H¹ seeds on a second flow reproduce the baseline
+ordering and ratio (H¹ 20–27× MSE in B at every Mach; far field above c0·dk ≈3× worse; B_S ≈10× worse).
+Remaining limits: one extra flow, no UNet/unroll4 on kf16, seeds 1–2 of the Mach-0.05 far-field criterion 4 are
+in their `03_errors.json` but unread. Notes: the run-1 cell was accidentally re-executed once (evaluation only,
 deterministic; the logged numbers match the first pass).
