@@ -14,6 +14,23 @@ Branch `tier0-review-notebooks`; remote `origin` = github.com/HSajeed/silent-fie
 **Session 2026-10-07:** review §5 steps 1–3 done (T-form far field + R_T; Stage-4 factor-2 fix;
 Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under way on Colab
 (`stage3_log.md`).
+**Session 2026-10-08 (review):** Experiment-5 JSONs read from Drive; error-floor crossover analysis
+(`scripts/11_crossover.py`) run on all 12 Mach-swept runs — M* predicted from the M=0.1 velocity ω-spectrum
+matches the observed far-field failure Mach to 1.19–1.52× (log-log Pearson 0.92). Full record:
+`stage3_log.md` ("Experiment 5 — additional numbers…", "Crossover analysis — addendum").
+
+## Resume here (session 2026-10-08)
+1. **Pull and run the new code** (written, not yet run; test in the conda env): `scripts/10` now saves
+   per-shell ω-spectra (`--n-shells`, default 4) plus `U`, `dk`; `scripts/11` predicts from the |k|=dk shell
+   when present and uses M*_obs(100%) as the primary criterion (vs-copy is secondary: ill-conditioned for H¹).
+   Re-run `10` on the runs you want shell spectra for, then `11`.
+2. **Denser Mach grid (analysis only):** `03 --extra-machs 0.03 0.035 0.04 0.06 0.07 0.08` on all 12 runs.
+   Removes the two extrapolated M*_obs values and tests whether the 1.2→1.5 drift in obs/pred is the grid.
+3. **UNet replication:** seeds 1–2 and UNet on kf16. Single-seed UNet reaches the cone-λ=1e3 crossover
+   (ω_x 30.6) with a stable rollout; if it holds, the practical recommendation changes.
+4. **Still open from Experiment 5:** λ=0 window-mode control (confound for val-MSE, "no field cost", rollout);
+   whitened (truth-PSD-normalised) cone loss — the uniform cone weight is amplitude-blind inside the cone, so
+   ω=60–78 stays worse than copying; noise-injection baseline; rollout E(|k|≤2, t) diagnostic.
 
 ## Resume here (end of session 2026-10-07)
 1. ~~Collect the pending Mach sweeps~~ **Done 2026-10-07 (second session):** all four non-seed runs
@@ -98,6 +115,16 @@ Bands = envelope over {full, first half, second half}; F = max/min of that envel
 - **Sobolev weighting can never raise the cone share** (w_eff ≥ 1, ≈ 1 in the cone). At the
   default λ it is idle everywhere; where it matters it lowers the share. See "Stage 4" below.
 
+- **Error-floor crossover sets the failure Mach (2026-10-08, `scripts/11`; `stage3_log.md`).** At low |k| the
+  truth's ω-spectrum falls ~ω^-14 (baseline) / ω^-13.7 (kf16) near the top of the band; surrogate errors fall
+  ω^-5.3…-7.9. Error = truth at ω_x (MSE 21.7, UNet 30.6, H¹ 16.6, cone λ=1e2/1e3/1e4 23.5/30.5/34.9; kf16 MSE
+  18.5, H¹ 13.7). M*_pred = U·dk/ω_x vs M*_obs (radiating-band far-field error = 100%): 12 runs, log-log
+  Pearson 0.92, slope 0.97, obs/pred 1.19–1.52 (median 1.25); calibrated on baseline, kf16 MSE predicted to
+  +2…+7%, H¹ −14…−17%. Field error does not predict M* (Pearson 0.26); B ranks but exaggerates (~5000× in B
+  for 1.9× in M*). Better losses give diminishing returns: MSE → cone λ=1e4 moves M*_obs 0.062 → 0.046 while B
+  falls 220×. ω_x so far is a summed-low-k proxy; shell spectra added to `10`.
+- **B/B_white is the model-side metric:** ≈0.03–0.065 for MSE across M = 0.05–0.3 while B spans 4×10⁴; the
+  "B ∝ M⁻⁶" trend is the truth's cone share.
 
 ## Decisions already made (don't reopen)
 - The Green's function is outgoing for numpy's e^{+iωt} convention: G = (−i/4)H₀⁽²⁾(kr). The gate's CHECK 3 (1/√r decay) and CHECK 4 (dφ/dr = −k) guard it.
@@ -206,6 +233,8 @@ Tests: **21 → 42** (64 after 2026-10-07). Gate `00` re-run, unchanged, PASS (C
 - `figures/komega_metrics_turb2d_kf16.json`, `komega_metrics_turb2d_L4pi.json`, `04_komega_turb2d_kf16.png`, `04_komega_turb2d_L4pi.png` — `scripts/04` outputs for the other datasets.
 - `figures/tform_metrics.json`, `tform_metrics_turb2d_kf16.json`, `tform_metrics_turb2d_L4pi.json` — R_T per Mach with bands and sub-dk part (`scripts/07`).
 - `figures/08_mach_scaling{,_turb2d_kf16,_turb2d_L4pi}.{json,png}` — radiated power, compact limit, local exponents vs M (`scripts/08`).
+- Drive `analysis/11_crossover/` — `11_crossover.json` / `.png` (first run, summed-low-k ω_x, 2026-10-08).
+  The next run also writes `11_crossover_summary.json`.
 
 ## Commands (run from `silent-field/`)
 ```
@@ -220,6 +249,7 @@ python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # Stage
 python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01
 python scripts/09_blindness.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01      # B, B_S + controls
 python scripts/10_error_diagnostic.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01/diag   # jitter vs aliasing
+python scripts/11_crossover.py --runs-root /content/drive/MyDrive/silent-field/runs --out /content/drive/MyDrive/silent-field/analysis/11_crossover   # M* predicted vs observed, JSON only (CPU)
 python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --out <path>
 ```
 
@@ -264,6 +294,10 @@ python scripts/01_generate_data.py --length <L> --forcing-k <k> --spinup <n> --o
      models on one rollout.
    For any trained Stage-4 run use the standard multiplicative H¹ loss (neuraloperator
    `H1Loss` style), not the additive λ=1e-2 form (review §2.3).
+   - **Experiment 5 (cone loss, baseline flow, seed 0) and the crossover analysis (2026-10-08):** see
+     `stage3_log.md`. Cone loss: radiating-band far field at M=0.05 218% → 94% (λ=1e3) / 83% (λ=1e4) vs copy
+     107%; still worse than copying at ω = 60–78; compact (below c0·dk) error ~2× worse; free rollout settles
+     at ~5–9× the energy (P/P0 ≈ 30 / 233). Crossover result in "Current conclusions".
 
 ## Working style
 The main agent orchestrates. It delegates execution to the `coder` and `logger` subagents
