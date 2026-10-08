@@ -25,7 +25,7 @@ Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under
    ordering on a second flow. Not run on kf16: UNet, unroll4; criterion 4 for seeds 1–2 (JSON unread).
    **Experiment 5 code is written and committed locally (`050d062`, not pushed):** `--loss cone` (+`--cone-lambda
    --cone-mach --cone-window --cone-stride --cone-batch`), `tests/test_cone_loss.py`, plan `EXP5_PLAN.md`
-   (pre-registered criteria; §7 leakage check recommends W=32 over the W=16 default — decision pending).
+   (pre-registered criteria; **decided: W=32 primary** — flags `--cone-window 32 --cone-stride 16 --cone-batch 1` — with W=16 as the variant at the best λ; code defaults still W=16).
    Next: user pushes, smoke on the T4 (cone-mode speed unmeasured), then λ ∈ {1e2, 1e3, 1e4}.
    Runner cells in the open notebook: setup cell (mount, pull, copy both datasets), per-run cell with
    `--data data/turb2d_kf16.npz --seed N`.
