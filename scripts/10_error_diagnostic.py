@@ -51,6 +51,12 @@ def shell_lag1(eu, ev, grid):
     return dk * np.sqrt(np.nonzero(present)[0]), den[present], num[present] / den[present]
 
 
+def shell_psd(spec, ks):
+    """omega-PSD on individual resolved |k| shells (one column of power_resolved each)."""
+    idx = [int(np.argmin(np.abs(spec.k_resolved - k))) for k in ks]
+    return [spec.power_resolved[:, j].tolist() for j in idx]
+
+
 def band(k, w, sel):
     """Energy-weighted mean of a per-shell quantity over a selection of shells."""
     return float(np.sum(w[sel]) and np.sum(w[sel] * k[sel]) / np.sum(w[sel]))
@@ -64,6 +70,8 @@ def main():
     ap.add_argument("--segments", type=int, default=4)
     ap.add_argument("--out", required=True)
     ap.add_argument("--smoke", action="store_true", help="first 64 snapshots, 2 segments")
+    ap.add_argument("--n-shells", type=int, default=4,
+                    help="also save the omega-PSD of the lowest N nonzero |k| shells (1, sqrt2, 2, sqrt5 on L=2pi)")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -94,11 +102,16 @@ def main():
     kt, wt, rho_t = shell_lag1(ut, vt, grid)
     low_t = spec_t.k_resolved <= k_cone
     psd_t = spec_t.power_resolved[:, low_t].sum(axis=1)
+    shells_k = spec_t.k_resolved[spec_t.k_resolved > 0][:args.n_shells]   # lowest nonzero shells
 
     out = {"mach": args.mach, "c0": c0, "k_cone_max": float(k_cone), "k_alias": float(k_alias),
            "truth": {"rho_lag1_cone_k": band(rho_t, wt, (kt > 0) & (kt <= k_cone)),
                      "rho_lag1_alias_k": band(rho_t, wt, kt > k_alias)},
-           "omega": omega.tolist(), "psd_lowk_truth": psd_t.tolist()}
+           "omega": omega.tolist(), "psd_lowk_truth": psd_t.tolist(),
+           # per-shell spectra (added 2026-10-08 for scripts/11): the radiating band of shell |k| starts at
+           # omega = c0*|k|, so the |k| = dk shell is the one that sets the failure Mach
+           "U": U, "dk": float(2.0 * np.pi / grid.length), "shells_k": shells_k.tolist(),
+           "psd_shell_truth": shell_psd(spec_t, shells_k)}
     specs = {}
     for name, (eu, ev) in errors.items():
         se = velocity_komega_spectrum(eu, ev, grid, dt, n_segments=args.segments)
@@ -124,6 +137,7 @@ def main():
             "lowk_err_over_truth_hi": float(psd_e[hi].sum() / psd_t[hi].sum()),
             "lowk_err_over_truth_mid": float(psd_e[mid].sum() / psd_t[mid].sum()),
             "psd_lowk_error": psd_e.tolist(),
+            "psd_shell_error": shell_psd(se, shells_k),
         }
         print(f"[{name}] done ({(time.time() - t0) / 60:.1f} min)", flush=True)
 

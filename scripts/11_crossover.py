@@ -14,11 +14,25 @@ M*, and compares it with the M* observed in scripts/03's far field (the Mach at 
 radiating-band far-field error equals the copy-input error, or 100%), interpolated in log-log
 between the Machs that were evaluated.  No model, no torch, no dataset: JSON in, JSON + figure out.
 
+Primary comparison (revised 2026-10-08 after the first run): M*_pred from the error = truth crossing
+against M*_obs(100%), the Mach at which the radiating-band far-field error reaches 100%.  The
+vs-copy-input criterion is kept as secondary: it is ill-conditioned when the model and copy-input
+errors run nearly parallel in Mach (kf16 H1: obs/pred 2.5-3.0x).
+
+Per-shell prediction.  scripts/10 (from 2026-10-08) also saves the omega-PSD of the lowest |k|
+shells.  Shell |k| radiates for omega >= c0*|k| = U*|k|/M, so it fails once M <= U*|k|/omega_x(|k|).
+When those spectra exist the primary prediction uses the |k| = dk shell; the summed-low-k proxy is
+still reported.  Older scripts/10 outputs (no shell spectra) fall back to the proxy.
+
 Caveats built into the method (read before quoting numbers):
   * psd_lowk_* in scripts/10 is summed over |k| <= omega_max / c0 at the Mach scripts/10 ran at
-    (6.93 baseline, 9.93 kf16 at M=0.1), not the |k| = dk shell alone.  omega_x is a proxy.
-  * dk = 2*pi/L; both trained datasets have L = 2*pi, so --dk 1 (default).
-  * Observed M* below the lowest evaluated Mach (0.05) is extrapolated and flagged.
+    (6.93 baseline, 9.93 kf16 at M=0.1), not the |k| = dk shell alone.  omega_x from it is a proxy.
+  * dk and U are read from scripts/10 when present; otherwise dk = --dk (1 for L = 2*pi) and
+    U = c0 * mach.
+  * Observed M* below the lowest evaluated Mach (0.05) is extrapolated and flagged.  Add Machs with
+    scripts/03 --extra-machs 0.03 0.035 0.04 0.06 0.07 0.08 to remove the extrapolation.
+  * First run (12 runs): M*_obs(100%) / M*_pred(summed proxy) = 1.19-1.52, median 1.25; log-log
+    Pearson 0.92.  The calibration constant is reported per dataset and leave-one-dataset-out.
 
     python scripts/11_crossover.py --runs-root /content/drive/MyDrive/silent-field/runs --out /content/drive/MyDrive/silent-field/analysis/11_crossover
     python scripts/11_crossover.py --runs-root runs --out figures/11_crossover
@@ -139,7 +153,8 @@ def analyse_run(run_dir, dk, fit_lo_frac):
         pe = np.array(d10["model"]["psd_lowk_error"])
         pc = np.array(d10["copy_input"]["psd_lowk_error"])
         mach10, c0 = d10["mach"], d10["c0"]
-        U = c0 * mach10
+        U = d10.get("U", c0 * mach10)
+        dk = d10.get("dk", dk)
         wx_t, ft = sustained_crossing(om, pe / np.maximum(pt, 1e-300))
         wx_c, fc = sustained_crossing(om, pe / np.maximum(pc, 1e-300))
         lo, hi = fit_lo_frac * om.max(), om.max()
@@ -156,6 +171,22 @@ def analyse_run(run_dir, dk, fit_lo_frac):
         }
         rec["_curves"] = {"omega": om.tolist(), "err_over_truth": (pe / np.maximum(pt, 1e-300)).tolist(),
                           "err_over_copy": (pe / np.maximum(pc, 1e-300)).tolist()}
+        # per-shell crossings (scripts/10 from 2026-10-08 onward)
+        if "psd_shell_truth" in d10 and "psd_shell_error" in d10.get("model", {}):
+            shells = []
+            for ks, st, se in zip(d10["shells_k"], d10["psd_shell_truth"], d10["model"]["psd_shell_error"]):
+                st, se = np.array(st), np.array(se)
+                wx, fl = sustained_crossing(om, se / np.maximum(st, 1e-300))
+                shells.append({"k": ks, "omega_x": wx, "flag": fl,
+                               "slope_truth": loglog_slope(om, st, lo, hi), "slope_err": loglog_slope(om, se, lo, hi),
+                               "Mstar_pred": (U * ks / wx) if wx else None})
+            rec["lowk"]["shells"] = shells
+            rec["lowk"]["Mstar_pred_shell1"] = shells[0]["Mstar_pred"] if shells else None
+            valid = [s["Mstar_pred"] for s in shells if s["Mstar_pred"]]
+            rec["lowk"]["Mstar_pred_shell_max"] = max(valid) if valid else None
+        rec["lowk"]["Mstar_pred_primary"] = rec["lowk"].get("Mstar_pred_shell1") or rec["lowk"]["Mstar_pred_truth"]
+        rec["lowk"]["primary_source"] = "shell1" if rec["lowk"].get("Mstar_pred_shell1") else "summed_lowk_proxy"
+        rec["dataset_key"] = f"U={U:.4g},dk={dk:.4g}"
     d03 = _load(f03) if f03 else None
     if d03:
         fbm = d03["far_field_by_mach"]
@@ -217,51 +248,87 @@ def main():
 
     # ---- table
     f = lambda x, s="{:.3g}": "—" if x is None else s.format(x)
-    print("=" * 128)
-    print(f"{'run':<26}{'fam':<7}{'ωx(err=truth)':>14}{'ωx(err=copy)':>13}{'p_truth':>9}{'p_err':>8}"
-          f"{'M*pred(t)':>11}{'M*pred(c)':>11}{'M*obs(copy)':>13}{'tag':>20}{'M*obs(100%)':>13}")
+    print("=" * 140)
+    print(f"{'run':<26}{'fam':<7}{'ωx(sum)':>9}{'ωx(|k|=1)':>10}{'p_truth':>9}{'p_err':>8}"
+          f"{'M*pred(sum)':>12}{'M*pred(k1)':>11}{'M*obs(100%)':>13}{'tag':>20}{'M*obs(copy)':>13}{'tag':>20}")
     for r in recs:
         lk, ff = r.get("lowk", {}), r.get("farfield", {})
-        print(f"{r['run']:<26}{r['family']:<7}{f(lk.get('omega_x_err_eq_truth')):>14}{f(lk.get('omega_x_err_eq_copy')):>13}"
+        sh1 = (lk.get("shells") or [{}])[0]
+        print(f"{r['run']:<26}{r['family']:<7}{f(lk.get('omega_x_err_eq_truth')):>9}{f(sh1.get('omega_x')):>10}"
               f"{f(lk.get('slope_truth'), '{:.1f}'):>9}{f(lk.get('slope_err'), '{:.1f}'):>8}"
-              f"{f(lk.get('Mstar_pred_truth')):>11}{f(lk.get('Mstar_pred_copy')):>11}"
-              f"{f(ff.get('Mstar_obs_copy')):>13}{ff.get('tag_copy', '—'):>20}{f(ff.get('Mstar_obs_100pct')):>13}")
-    print("=" * 128)
-    pairs = [(r["lowk"]["Mstar_pred_truth"], r["farfield"]["Mstar_obs_copy"]) for r in recs
-             if r.get("lowk", {}).get("Mstar_pred_truth") and r.get("farfield", {}).get("Mstar_obs_copy")]
-    if len(pairs) >= 3:
-        a = np.log(np.array(pairs))
-        rho = float(np.corrcoef(a[:, 0], a[:, 1])[0, 1])
-        ratio = np.exp(a[:, 1] - a[:, 0])
-        print(f"log-log corr(M*pred(truth), M*obs(copy)) = {rho:.3f} over {len(pairs)} runs;"
-              f"  obs/pred median {np.median(ratio):.2f}, range [{ratio.min():.2f}, {ratio.max():.2f}]")
+              f"{f(lk.get('Mstar_pred_truth')):>12}{f(lk.get('Mstar_pred_shell1')):>11}"
+              f"{f(ff.get('Mstar_obs_100pct')):>13}{ff.get('tag_100pct', '—'):>20}"
+              f"{f(ff.get('Mstar_obs_copy')):>13}{ff.get('tag_copy', '—'):>20}")
+    print("=" * 140)
+
+    def compare(pred_key, obs_key, tag_key, label):
+        rows = [(r["lowk"][pred_key], r["farfield"][obs_key], r["farfield"][tag_key] == "interpolated",
+                 r.get("dataset_key"), r["run"]) for r in recs
+                if r.get("lowk", {}).get(pred_key) and r.get("farfield", {}).get(obs_key)]
+        if len(rows) < 3:
+            print(f"{label}: fewer than 3 runs with both numbers"); return None
+        p = np.log([q[0] for q in rows]); ob = np.log([q[1] for q in rows]); ratio = np.exp(ob - p)
+        rho = float(np.corrcoef(p, ob)[0, 1]); slope = float(np.polyfit(p, ob, 1)[0])
+        interp = np.array([q[2] for q in rows])
+        print(f"{label}: n={len(rows)} ({interp.sum()} interpolated)  log-log Pearson {rho:.3f}, slope {slope:.2f};"
+              f"  obs/pred median {np.median(ratio):.2f} [{ratio.min():.2f}, {ratio.max():.2f}]")
+        # calibration per dataset, and leave-one-dataset-out prediction
+        keys = sorted(set(q[3] for q in rows))
+        out = {"n": len(rows), "pearson_log": rho, "slope_log": slope, "ratio_median": float(np.median(ratio)),
+               "ratio_min": float(ratio.min()), "ratio_max": float(ratio.max()), "per_dataset": {}}
+        for k in keys:
+            sel = np.array([q[3] == k for q in rows]); rest = ~sel
+            cal_in = float(np.median(ratio[sel]))
+            line = f"    dataset {k}: n={sel.sum()}, median obs/pred {cal_in:.2f}"
+            d = {"n": int(sel.sum()), "ratio_median": cal_in}
+            if rest.any():
+                cal_out = float(np.median(ratio[rest]))
+                err = np.exp(ob[sel]) / (np.exp(p[sel]) * cal_out) - 1
+                line += f"; calibrated on the other dataset(s) ({cal_out:.2f}) -> error {err.min():+.0%} .. {err.max():+.0%}"
+                d.update({"cal_from_others": cal_out, "loo_rel_err": err.tolist()})
+            print(line); out["per_dataset"][k] = d
+        return out
+
+    summary = {"primary": compare("Mstar_pred_primary", "Mstar_obs_100pct", "tag_100pct",
+                                  "PRIMARY   M*pred (|k|=1 shell if available, else summed) vs M*obs(100%)"),
+               "summed_vs_100pct": compare("Mstar_pred_truth", "Mstar_obs_100pct", "tag_100pct",
+                                           "summed    M*pred(err=truth) vs M*obs(100%)"),
+               "copy_vs_copy": compare("Mstar_pred_copy", "Mstar_obs_copy", "tag_copy",
+                                       "secondary M*pred(err=copy) vs M*obs(copy)  [ill-conditioned for flat ratios]")}
+    (o / "11_crossover_summary.json").write_text(json.dumps(summary, indent=2))
 
     # ---- figure
     try:
         import matplotlib; matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         col = {"mse": "#4C72B0", "unet": "#55A868", "unroll": "#8172B2", "h1": "#C44E52", "cone": "#DD8452"}
+        marks = {}
         fig, ax = plt.subplots(1, 3, figsize=(17, 5))
         for r in recs:
             c = col.get(r["family"], "gray")
+            mk = marks.setdefault(r.get("dataset_key"), "osD^v"[len(marks) % 5])
             if "_curves" in r:
                 cv = r["_curves"]; w = np.array(cv["omega"][1:])
                 ax[0].loglog(w, np.array(cv["err_over_truth"][1:]), color=c, lw=1, alpha=.8)
                 ax[1].loglog(w, np.array(cv["err_over_copy"][1:]), color=c, lw=1, alpha=.8)
             lk, ff = r.get("lowk", {}), r.get("farfield", {})
-            for key, mk in (("Mstar_pred_truth", "o"), ("Mstar_pred_copy", "s")):
-                if lk.get(key) and ff.get("Mstar_obs_copy"):
-                    hollow = ff["tag_copy"] != "interpolated"
-                    ax[2].scatter(lk[key], ff["Mstar_obs_copy"], marker=mk, s=46,
-                                  facecolors="none" if hollow else c, edgecolors=c)
-                    ax[2].annotate(r["run"], (lk[key], ff["Mstar_obs_copy"]), fontsize=6, alpha=.7) if key == "Mstar_pred_truth" else None
-        for a, t in ((ax[0], "low-k error PSD / truth PSD"), (ax[1], "low-k error PSD / copy-input error PSD")):
-            a.axhline(1, color="k", lw=.8, ls=":"); a.set_xlabel("ω"); a.set_title(t)
-        lim = [0.01, 0.2]
-        ax[2].plot(lim, lim, "k:", lw=.8); ax[2].set_xscale("log"); ax[2].set_yscale("log")
-        ax[2].set_xlabel("M* predicted = U·dk/ω_x   (○ err=truth, □ err=copy)")
-        ax[2].set_ylabel("M* observed: far field above c0·dk = copy-input")
-        ax[2].set_title("hollow = extrapolated beyond evaluated Machs")
+            if lk.get("Mstar_pred_primary") and ff.get("Mstar_obs_100pct"):
+                hollow = ff["tag_100pct"] != "interpolated"
+                x, y = lk["Mstar_pred_primary"], ff["Mstar_obs_100pct"]
+                ax[2].scatter(x, y, marker=mk, s=50, facecolors="none" if hollow else c, edgecolors=c)
+                ax[2].annotate(r["run"], (x, y), fontsize=6, alpha=.7)
+        for a, t in ((ax[0], "low-k error PSD / truth PSD (summed over low |k|)"),
+                     (ax[1], "low-k error PSD / copy-input error PSD")):
+            a.axhline(1, color="k", lw=.8, ls=":"); a.set_xlabel("ω"); a.set_title(t, fontsize=10)
+        lim = np.array([0.015, 0.3])
+        ax[2].plot(lim, lim, "k:", lw=.8, label="1:1")
+        med = (summary.get("primary") or {}).get("ratio_median")
+        if med:
+            ax[2].plot(lim, lim * med, "k--", lw=.8, label=f"×{med:.2f} (median)")
+        ax[2].set_xscale("log"); ax[2].set_yscale("log"); ax[2].legend(fontsize=8, loc="upper left")
+        ax[2].set_xlabel("M* predicted = U·|k|/ω_x  (|k|=1 shell if saved, else summed low-k)")
+        ax[2].set_ylabel("M* observed: radiating-band far-field error = 100%")
+        ax[2].set_title("marker = dataset; hollow = extrapolated beyond evaluated Machs", fontsize=10)
         for fam, c in col.items():
             ax[0].plot([], [], color=c, label=fam)
         ax[0].legend(fontsize=8)
