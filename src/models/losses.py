@@ -9,7 +9,7 @@ If you later want to test a fix rather than diagnose the failure,
 `cone_weighted_loss` is the obvious candidate and the natural continuation of
 the project: weight by proximity to the sonic line instead of by |k|.  It needs
 a time window to define omega, so it is a multi-step objective, not a one-step
-one. Left deliberately unimplemented -- that is the open question.
+one. `cone_window_loss` below is Experiment 5's implementation of exactly that.
 """
 from __future__ import annotations
 
@@ -79,6 +79,41 @@ def h1_loss(pred, target, length: float = 2 * 3.141592653589793):
     num = (weight * torch.abs(e) ** 2).sum(dim=dims)
     den = (weight * torch.abs(t) ** 2).sum(dim=dims)
     return torch.mean(torch.sqrt(num / den))
+
+
+def cone_window_loss(err, dt: float, length: float, c0: float):
+    """Energy of `err` (B, W, 2, n, n, normalised units) inside the radiating cone
+    omega >= c0*|k|, as a fraction of the total MSE scale.
+
+    Hann-windowed (rescaled to unit mean square, so a stationary signal's energy is
+    preserved) along the time axis, then a complex FFT over time and a full 2-D FFT
+    over space, both `norm="ortho"`.  The cone mask is evaluated per exact (omega, k)
+    mode -- same convention as `_k_grid`, but on the full fft2 plane since the cone
+    is not kx=0-column symmetric the way `_k_grid`'s rfft2 half-plane is.  The k=0
+    column is excluded (same reasoning as `radiating_mask_resolved` in
+    src/acoustics/komega.py): omega >= c0*0 is trivially true and would count the
+    mean mode as radiating.
+
+    Returns sum(power * mask) / err.numel(), so a mask of all ones reproduces the
+    plain MSE on `err` (up to windowing), making the term directly comparable to
+    (and addable to) `mse_loss`.
+    """
+    b, w, c, h, wi = err.shape
+    window = torch.hann_window(w, periodic=False, dtype=err.dtype, device=err.device)
+    window = window / torch.sqrt(torch.mean(window ** 2))
+    e = err * window.view(1, w, 1, 1, 1)
+    e_ft = torch.fft.fft(e, dim=1, norm="ortho")
+    e_ft = torch.fft.fft2(e_ft, dim=(-2, -1), norm="ortho")
+    power = (e_ft.abs() ** 2).sum(dim=2)                     # (B, W, h, wi)
+
+    omega = torch.fft.fftfreq(w, d=dt, device=err.device) * 2 * 3.141592653589793
+    omega = omega.abs()
+    ky = torch.fft.fftfreq(h, d=length / h, device=err.device)[:, None] * 2 * 3.141592653589793
+    kx = torch.fft.fftfreq(wi, d=length / wi, device=err.device)[None, :] * 2 * 3.141592653589793
+    k = torch.sqrt(kx ** 2 + ky ** 2)
+
+    mask = (omega[:, None, None] >= c0 * k[None, :, :]) & (k[None, :, :] > 0.0)
+    return (power * mask.unsqueeze(0)).sum() / err.numel()
 
 
 def divergence_penalty(pred, length: float = 2 * 3.141592653589793):
