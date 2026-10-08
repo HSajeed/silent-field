@@ -26,14 +26,16 @@ Mach scaling: radiated power follows the compact 2D law), and Stage 3 well under
    **Experiment 5 code is written and committed locally (`050d062`, not pushed):** `--loss cone` (+`--cone-lambda
    --cone-mach --cone-window --cone-stride --cone-batch`), `tests/test_cone_loss.py`, plan `EXP5_PLAN.md`
    (pre-registered criteria; **decided: W=32 primary** — flags `--cone-window 32 --cone-stride 16 --cone-batch 1` — with W=16 as the variant at the best λ; code defaults still W=16).
-   Next: user pushes, smoke on the T4 (cone-mode speed unmeasured), then λ ∈ {1e2, 1e3, 1e4}.
+   **Experiment 5 baseline sweep done (λ=1e2/1e3/1e4, W=32, seed 0; `stage3_log.md` "Experiment 5"):** B(M=0.1) 603 / 82 /
+   21 vs MSE 4.7–5.6e3 (copy 21.5), field error unchanged to λ=1e3, source error 29.6 → 23.8%, all pre-registered
+   criteria pass; **free rollout worsens with λ** (P/P0 2.0 / 30 / 233). Not yet run: more seeds, W=16, M=0.05,
+   kf16 (user wants both datasets).
    Runner cells in the open notebook: setup cell (mount, pull, copy both datasets), per-run cell with
    `--data data/turb2d_kf16.npz --seed N`.
 
-2. **Decide experiment 5.** Candidates: noise-injection training; PDE-Refiner-style refinement;
-   the project's open question — a loss weighted by proximity to the sonic line over a time
-   window (the evidence so far says the lever is weighting in ω, not unrolling or H¹).
-   Also worth doing: rollout metrics need several seeds; one more dataset (`turb2d_kf16`).
+2. **Decide next steps after the Experiment-5 review** (open): replicate on `turb2d_kf16` (λ=1e3 first), seeds at
+   λ=1e3, W=16 variant, rollout stability (the new loss makes free rollout worse with λ — consider combining with
+   unrolling/noise injection, or reporting as a limit), then literature baselines (noise injection, PDE-Refiner).
 3. **Colab workflow:** `colabmcp.md` (local, untracked). The user pushes (the agent's shell
    has no SSH key), connects the T4 and clicks the Drive consent. Notebook is "RunStage3"
    (the agent's connect call once opened a stray "scratchpad" notebook — reuse the open one).

@@ -303,3 +303,68 @@ ordering and ratio (H¹ 20–27× MSE in B at every Mach; far field above c0·dk
 Remaining limits: one extra flow, no UNet/unroll4 on kf16, seeds 1–2 of the Mach-0.05 far-field criterion 4 are
 in their `03_errors.json` but unread. Notes: the run-1 cell was accidentally re-executed once (evaluation only,
 deterministic; the logged numbers match the first pass).
+
+## Experiment 5 — cone-window loss, baseline data (2026-10-08; code `050d062`, plan `EXP5_PLAN.md`)
+
+`--loss cone`: MSE + λ × (error energy inside the cone ω ≥ c0|k|, k>0, over W=32 teacher-forced
+consecutive one-step predictions, Hann in time, exact per-mode mask, ÷ numel so it equals
+error-cone-fraction × MSE scale). FNO, `data/turb2d.npz`, seed 0, W=32, stride 16, batch 1 window
+(32 frames/step; 62 windows), training Mach 0.1 (c0 = 11.308), 60 epochs. Cone-mode training
+11.4–11.6 min on the T4 (plain MSE ~7), peak GPU 2.5 GB (probe). Runs `runs/cone_l<λ>_m0.1_w32_s0/`,
+evaluated with `03 --extra-machs`, `09 --machs`, `10` exactly as before. λ=1e3 was evaluated twice by an
+accidental cell re-run (identical numbers, evaluation is deterministic; the figures below are from the
+first pass, the repeat matched on `03`).
+
+Teacher-forced, M=0.1 (MSE = three FNO seeds 0/1/2, baseline):
+
+| measure | MSE seeds | λ=1e2 | λ=1e3 | λ=1e4 | copy-input |
+|---|---|---|---|---|---|
+| B | 4.71 / 4.92 / 5.56e3 | 603 | 81.9 | **21.3** | 21.5 |
+| B_S | 9.24 / 9.33 / 9.51 | 5.80 | 2.25 | 1.54 | 3.16 |
+| field error | 3.04 / 3.09 / 3.16% | 3.17% | 3.17% | 3.36% | 9.63% |
+| source error | 28.6 / 29.5 / 30.8% | 27.79% | 23.81% | 23.40% | 31.55% |
+| far field complex: all / below / above c0·dk | 2.7 / 0.9 / 19.0–22.7% | 2.74 / 1.43 / 17.24% | 2.39 / 1.62 / **13.05%** | 3.17 / 2.40 / 15.52% | 18.9 / 17.7 / 52.2% |
+| low-k error ÷ truth, high ω | 191 / 208 / 226 | 96 | 13.6 | 3.5 | 2.2 |
+| one-step val MSE (final) | 2.17 / 2.30 / 2.52e-3 | 1.89e-3 | 1.49e-3 | 1.52e-3 | |
+| val cone term | | 1.3e-7 | 2.4e-8 | 6.8e-9 | |
+
+(Validation splits differ between window and pair modes — held-out last windows with a boundary
+drop — so the val-MSE row is not a strict comparison.)
+
+B by Mach, M = 0.05 / 0.1 / 0.2 / 0.3: λ=1e2 1.59e5 / 603 / 72.7 / 17.0; λ=1e3 1.73e4 / 81.9 / 19.8 /
+6.92; λ=1e4 2.46e3 / 21.3 / 8.68 / 4.93; MSE seed 0 1.23e6 / 4.71e3 / 154 / 29.1; copy 66.9 / 21.5 /
+7.94 / 4.92. Factor below MSE seed 0: λ=1e2 7.7 / 7.8 / 2.1 / 1.7×; λ=1e3 71 / 57 / 7.8 / 4.2×; λ=1e4
+500 / 221 / 17.7 / 5.9×. B_S by Mach λ=1e3: 2.11 / 2.25 / 2.32 / 3.12 (flat, and below the copy-input
+value 2.56 / 3.16 / 5.52 / 9.2 at every Mach); λ=1e4 1.37 / 1.54 / 2.34 / 4.14.
+
+Free rollout (1023 steps, all finite), M=0.1; MSE seeds in parentheses:
+
+| | λ=1e2 | λ=1e3 | λ=1e4 |
+|---|---|---|---|
+| field / source error | 134% / 159% | 238% / 634% | 309% / 2306% |
+| P/P0 (radiated power ratio) | 1.98 | 30 | 233 (at M=0.05 256) |
+| R_T/R_T0 | 1.33 | 28.9 | 89.5 |
+| (MSE seeds) | P/P0 0.49–1.11, R_T ratio 0.77–14, field ~136% | | |
+
+Pre-registered criteria (`EXP5_PLAN.md` §4), each λ: (i) B < ⅓ of the MSE mean (5.06e3) and outside
+seed spread — **pass** (603 / 82 / 21); (ii) far field above c0·dk below 19.0–22.7% — **pass** (17.2 /
+13.1 / 15.5%); (iii) field error ≤10% above 3.04–3.16% — **pass** (3.17 / 3.17 / 3.36%); (iv) B_S not
+worse — **pass**; (v) effect at other Mach — **pass**, but the gain shrinks with M (λ=1e3: 71× → 4.2×).
+
+Reading (interpretation unless stated):
+- **Monotone dose-response.** B falls with λ (603 → 82 → 21), reaches the copy-input floor at λ=1e4, and
+  low-k high-ω error ÷ truth falls 96 → 13.6 → 3.5 (truth-level 2.2). The jitter is removable with a
+  loss that sees the cone; L2 simply never asked [consistent with the claim; not proven for other flows].
+- **No field-accuracy cost up to λ=1e3**; λ=1e4 costs ~6–8% of field error (3.36 vs 3.04–3.16%) and its
+  far-field above c0·dk is worse than λ=1e3's (15.5 vs 13.1%). λ=1e3 is the best balance on the
+  teacher-forced metrics; λ=1e4 minimises B.
+- **Not just the trained metric.** B at M=0.1 is close to what the loss optimises (same mask, same c0).
+  The independent checks improve too: B_S (a quadratic source measure, 9.4 → 2.25), source error
+  (29.6 → 23.8%), far field above c0·dk, and B at other Mach (where the cone differs: the trained M=0.1
+  cone is a subset of the wider M ≥ 0.2 cones, which may explain the shrinking gain there [untested]).
+- **Rollout gets worse with λ** (P/P0 1.98 → 30 → 233; R_T ratio 1.3 → 29 → 90), monotone over three λ
+  and outside the MSE seed range for λ ≥ 1e2. Single seed per λ, so the magnitude is soft, but the trend
+  is the open risk: the loss improves the teacher-forced error and degrades free-running forecasts
+  [mechanism unknown; not tested].
+- Limits: one seed per λ, one dataset (kf16 not yet run), window W=16 variant not yet run, training Mach
+  0.05 variant not run, MSE comparison is to the baseline seeds (no matched-seed cone runs).
