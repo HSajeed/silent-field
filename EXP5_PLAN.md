@@ -47,9 +47,12 @@ on the full-record error R(error) that defines B].
 
 ## 3. Runs
 
+**Decided (user, 2026-10-08): primary window W=32, W=16 as the variant** (reasons in §7).
+Primary flags: `--loss cone --cone-window 32 --cone-stride 16 --cone-batch 1 --cone-mach 0.1`
+(code defaults are still W=16/stride 8/batch 2; always pass these explicitly).
 FNO, baseline data `data/turb2d.npz`, seed 0 first, then more seeds for any lambda that
-works. lambda ∈ {1e2, 1e3, 1e4}, training Mach 0.1. Variant: training Mach 0.05 at the best
-lambda. Same 60 epochs and recipe as existing Stage-3 runs. Out dirs
+works. lambda ∈ {1e2, 1e3, 1e4}, training Mach 0.1, W=32. Variants, each at the best lambda:
+W=16 (`--cone-window 16 --cone-stride 8 --cone-batch 2`), and training Mach 0.05. Same 60 epochs and recipe as existing Stage-3 runs. Out dirs
 `runs/cone_l<lambda>_m<mach>_s<seed>`.
 
 Evaluation exactly as the other runs:
@@ -135,4 +138,4 @@ smooth low-ω, so a Hann window can leak that error into the first cone bins. Me
 - [interpretation] Prefer W=32 as the primary setting (`--cone-window 32 --cone-stride 16
   --cone-batch 1`: 32 frames per step, ~54 steps per epoch, est. peak GPU memory ~1.9 GB for
   W=16 × batch 2, so the same for W=32 × batch 1 [unverified]); keep W=16 as a variant. This
-  changes §3 and is a decision for the user; nothing in the code defaults to it yet (default is W=16).
+  was accepted by the user on 2026-10-08 and is reflected in §3; code defaults are unchanged (W=16), so pass the W=32 flags explicitly. Not yet measured: whether W=32 trains better than W=16 (the leakage figures above come from the copy-input error, not a trained model's error).
