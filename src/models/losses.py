@@ -66,7 +66,7 @@ def h1_loss(pred, target, length: float = 2 * 3.141592653589793):
     ||f||_H1^2 = sum_k (1 + |k|^2) |f_hat(k)|^2 -- i.e. ||f||^2 + ||grad f||^2 in Fourier space.
 
     Multiplicative (1 + k^2) weighting, unlike `sobolev_loss` (MSE + a small mean-normalised
-    term; review_2026-10-01.md section 2.3).  Uses the full-plane fft2, so every mode is
+    term).  Uses the full-plane fft2, so every mode is
     weighted once and there is no rfft2 kx = 0 column anisotropy.
     """
     h, w = pred.shape[-2:]

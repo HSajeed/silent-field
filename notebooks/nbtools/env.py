@@ -4,7 +4,7 @@ Colab: clones the private repo with a token from Colab Secrets (key `GH_TOKEN`),
 Google Drive and reads datasets from `MyDrive/silent-field/data/`.
 Local: finds the repo by walking up from the working directory and reads `data/`.
 
-Datasets are never regenerated here (see CLAUDE.md); they are checked instead.
+Datasets are never regenerated here; they are checked instead.
 """
 from __future__ import annotations
 

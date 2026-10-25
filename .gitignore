@@ -1,6 +1,4 @@
 # --- local working notes (not published) ---
-agent-operator-playbook-full.md
-
 # --- datasets: large binaries, regenerate with scripts/01_generate_data.py ---
 # HANDOFF.md: do not regenerate; they already exist on disk.
 # Manifests ARE tracked: they carry the hashes (111e13e318c9, e5d144b83287,
@@ -79,3 +77,14 @@ TIER0_PLAN.md
 acoustic-blindness-build-plan.md
 branch_analysis.md
 lit_review_*.md
+CLAUDE.md
+HANDOFF.md
+EXP5_PLAN.md
+NOTEBOOK_PLAN.md
+TIER0_PLAN.md
+acoustic-blindness-build-plan.md
+branch_analysis.md
+lit_review_*.md
+review_*.md
+rerun_log_*.md
+stage3_log.md

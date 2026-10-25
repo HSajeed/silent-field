@@ -141,7 +141,7 @@ def _radial_resolve(power: np.ndarray, k_sq: np.ndarray, dk: float, chunk: int =
 
     The gather that sorting implies is applied in chunks along the frequency axis.  A
     full fancy-index copy of the (n_omega, n^2) array would be 1.1 GB at n = 256,
-    nt = 4096, which is the allocation `HANDOFF.md` warns against; chunking bounds it
+    nt = 4096, which is an allocation to avoid; chunking bounds it
     to a few tens of MB.
     """
     flat = power.reshape(power.shape[0], -1)

@@ -65,8 +65,10 @@ repair an amplitude-based blindness.
 
 Setup: an FNO and a UNet learn the one-step map `u(t) → u(t+Δt)`, with stock architectures,
 three seeds, MSE and relative-H¹ objectives, plus a 4-step unrolled variant. They are scored
-against the truth and against trivial references. Checkpoints are on Google Drive, not in
-this repository; the full record with commands is [`docs/stage3_log.md`](docs/stage3_log.md).
+against the truth and against trivial references. The runs used a free Colab T4. Checkpoints
+and per-run evaluation JSONs are not in this repository, so the numbers below come from my
+runs and cannot be reproduced from a clone alone; the commands to regenerate them are under
+Reproduce.
 
 Two quantities are used throughout:
 
@@ -161,16 +163,18 @@ python scripts/08_mach_scaling.py          # radiated power vs Mach
 the training script refuses a data file that does not match. The headline figure and the
 Sobolev argument need neither torch nor a GPU.
 
-Stage 3 needs a GPU (the logged runs used a free Colab T4):
+Stage 3 needs a GPU (the runs used a free Colab T4):
 
 ```bash
-python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # --loss mse|sobolev|h1|cone
+python scripts/02_train_surrogate.py --model fno --out runs/fno_mse_01   # --loss mse|sobolev|h1|cone, --seed, --unroll K
+python scripts/03_compute_sources.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01   # --extra-machs for sweeps
 python scripts/09_blindness.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01 --machs 0.05 0.1 0.2 0.3
+python scripts/10_error_diagnostic.py --model runs/fno_mse_01/model.pt --out runs/fno_mse_01/diag
 python scripts/11_crossover.py --runs-root runs --out figures/11_crossover
-```
 
-`scripts/03` and `scripts/10` produce the source/far-field errors and the jitter-versus-aliasing
-diagnostic that `09` and `11` build on; see `docs/stage3_log.md` for the exact commands.
+# cone loss (W = 32 is the main configuration)
+python scripts/02_train_surrogate.py --loss cone --cone-lambda 1e3 --cone-window 32 --cone-stride 16 --cone-batch 1 --out runs/fno_cone
+```
 
 ## What would work, and what is open
 
@@ -194,8 +198,17 @@ src/solvers/     2D Navier–Stokes, vortex pair, dataset IO
 src/models/      FNO, UNet, losses (including the cone-window loss), training
 scripts/         00–11: gate, data, training, evaluation, analysis
 tests/           unit tests for each of the above
-docs/            Stage 3 log, rerun record, pitfalls
+docs/            pitfalls.md
 ```
+
+## How this was built
+
+The question, scope and direction are mine: I set the constraints (a result a reader can
+reproduce on a laptop in minutes), chose which experiments to run and replicate (the second
+flow, the cone-loss window), and ran the GPU experiments and the tests myself. Claude
+(Anthropic) wrote the code and the audits, and gave its own analysis of the outputs along the
+way. It helped me correct my mistakes. None of the analysis here rests on Claude's reasoning
+alone.
 
 ## References
 

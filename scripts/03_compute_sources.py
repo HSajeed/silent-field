@@ -3,7 +3,7 @@
 
 The far field is radiated in the T-form (u_i u_j against the exact d_i d_j G): the
 S-form also integrates a spurious box-edge term in a periodic box (Sarkar & Hussaini
-1993; review_2026-10-01.md section 1), and the compact term radiates below c0*dk.
+1993), and the compact term radiates below c0*dk.
 
 Reports the contrast the project rests on. The field error is the number papers
 publish; the source and far-field errors are what the flow actually sounds like.
