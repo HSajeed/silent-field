@@ -5,7 +5,7 @@
 
   * nothing below the first box mode dk = 2 pi / L.  The box integral of T_ij (its
     k = 0 content) is not zero, and it is the compact term that dominates the far
-    field at low frequency (review_2026-10-01.md section 1.3);
+    field at low frequency;
   * the cone is sampled only at grid modes, so at low Mach it holds a handful of them.
 
 Sarkar & Hussaini (1993, ICASE 93-74, Eq. 2) treat the box contents as a finite volume

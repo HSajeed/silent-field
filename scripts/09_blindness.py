@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""STAGE 3 -- the blindness ratios B and B_S, with the controls review_2026-10-01.md §4.2 asks for.
+"""STAGE 3 -- the blindness ratios B and B_S, with controls.
 
     B   = R(error) / R(truth)      cone share of the velocity error vs of the signal
     B_S = R_T(error) / R_T(truth)  the same for the Lighthill stress (T-form, sub-dk included)
