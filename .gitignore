@@ -1,6 +1,4 @@
-# --- local-only notes ---
-# CLAUDE.md and HANDOFF.md are tracked since 2026-10-01 (the repo is private and they
-# are the project's working state). This one stays local.
+# --- local working notes (not published) ---
 agent-operator-playbook-full.md
 
 # --- datasets: large binaries, regenerate with scripts/01_generate_data.py ---
@@ -73,3 +71,11 @@ tmp/
 
 # --- notebook caches (spectra, extracted old src/) ---
 .nb_cache/
+CLAUDE.md
+HANDOFF.md
+EXP5_PLAN.md
+NOTEBOOK_PLAN.md
+TIER0_PLAN.md
+acoustic-blindness-build-plan.md
+branch_analysis.md
+lit_review_*.md
