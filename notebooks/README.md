@@ -2,7 +2,7 @@
 
 A guided, runnable walk through the whole project: what was done first, what changed and
 why, and what comes next. Every number that also appears in a log is recomputed and
-checked against that log. Old code (the initial commit `2535bb4`) runs side by side with
+checked against that log. Old code (the initial commit `528fbf9`) runs side by side with
 the current code.
 
 | # | notebook | covers | runtime |

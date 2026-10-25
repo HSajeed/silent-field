@@ -141,7 +141,7 @@ TIMELINE = [
     ("09-15", "Production rerun: gate PASS, baseline dataset, R = 8.7e-08 at M = 0.1", "no", "01–03"),
     ("09-15", "Independent audit: incoming Green's function; gate blind spots; cone energy at |k| = 1", "no", "01, 03"),
     ("09-15", "Follow-up B1–B8: kernel fixed; CHECKs 3–4; loss k-grid fixed; bands; kf16 and L4π datasets", "no", "01–04"),
-    ("09-29", "Initial commit 2535bb4 (21 tests); branch_analysis.md review", "yes", "04"),
+    ("09-29", "Initial commit 528fbf9 (21 tests); branch_analysis.md review", "yes", "04"),
     ("09-30", "Tier 0: exact cone mask; Sobolev convention; far-field band; 42 tests", "yes", "04"),
     ("10-01", "Review: S-form far-field artifact; Stage-4 reframing; audit of branch_analysis", "yes", "05"),
     ("next", "Stage 3 (train surrogates, B metric), Stage 4, causal test", "-", "06, 07"),

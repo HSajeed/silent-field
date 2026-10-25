@@ -13,7 +13,7 @@
 # **Inputs:** `turb2d.npz`; spectra cached by chapter 03 if available. **Runtime:** ~10 min.
 #
 # **How "old" works:** `nbtools.versions.old_src()` extracts `src/` from the initial commit
-# `2535bb4` (2026-09-29, after the 09-15 follow-up, before Tier 0). It imports that copy as
+# `528fbf9` (2026-09-29, after the 09-15 follow-up, before Tier 0). It imports that copy as
 # the package `src_old`, so both versions run side by side in this kernel. The two 09-15
 # fixes predate that commit; they are shown as labelled *reconstructions*.
 

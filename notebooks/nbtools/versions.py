@@ -20,7 +20,7 @@ import tarfile
 import io
 from pathlib import Path
 
-INITIAL_COMMIT = "2535bb4"  # 2026-09-29: post-follow-up (09-15), pre-Tier-0
+INITIAL_COMMIT = "528fbf9"  # 2026-09-29: post-follow-up (09-15), pre-Tier-0
 
 
 def _repo_root() -> Path:
